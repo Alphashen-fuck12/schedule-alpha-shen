@@ -777,32 +777,42 @@
     var sk = key(sd,sp), dk = key(dd,dp);
     var touched, desc;
 
+    // 第一步：先确定受影响格子，并计算描述
+    if(op==='swap'){
+      touched = [sk,dk];
+      desc = '对调：'+WEEKDAYS[sd]+'第'+(sp+1)+'节 ↔ '+WEEKDAYS[dd]+'第'+(dp+1)+'节';
+    } else if(op==='move'){
+      if(!(state.grid[sk]||[]).length){ alert('源格子是空的，没有可移动的内容'); return; }
+      touched = [sk,dk];
+      desc = '移动：'+WEEKDAYS[sd]+'第'+(sp+1)+'节 → '+WEEKDAYS[dd]+'第'+(dp+1)+'节';
+    } else if(op==='change'){
+      touched = [sk];
+      desc = '改成：'+WEEKDAYS[sd]+'第'+(sp+1)+'节 → '+document.getElementById('opCourse').value;
+    } else {
+      touched = [sk];
+      desc = '清空：'+WEEKDAYS[sd]+'第'+(sp+1)+'节';
+    }
+
+    // 第二步：在格子被修改之前捕获快照（撤销时以此还原）
+    var before = snapshotKeys(touched);
+
+    // 第三步：执行换课操作
     if(op==='swap'){
       var a = state.grid[sk]||[]; var b = state.grid[dk]||[];
       state.grid[sk] = JSON.parse(JSON.stringify(b));
       state.grid[dk] = JSON.parse(JSON.stringify(a));
-      touched = [sk,dk];
-      desc = '对调：'+WEEKDAYS[sd]+'第'+(sp+1)+'节 ↔ '+WEEKDAYS[dd]+'第'+(dp+1)+'节';
     } else if(op==='move'){
       var src = state.grid[sk]||[];
-      if(!src.length){ alert('源格子是空的，没有可移动的内容'); return; }
       if(!state.grid[dk]) state.grid[dk] = [];
       state.grid[dk] = state.grid[dk].concat(JSON.parse(JSON.stringify(src)));
       delete state.grid[sk];
-      touched = [sk,dk];
-      desc = '移动：'+WEEKDAYS[sd]+'第'+(sp+1)+'节 → '+WEEKDAYS[dd]+'第'+(dp+1)+'节';
     } else if(op==='change'){
       var course = document.getElementById('opCourse').value;
       state.grid[sk] = [{ course:course, grade:state.grade||GRADES[0], cls:clsOptions()[0], room:'', note:'' }];
-      touched = [sk];
-      desc = '改成：'+WEEKDAYS[sd]+'第'+(sp+1)+'节 → '+course;
     } else {
       delete state.grid[sk];
-      touched = [sk];
-      desc = '清空：'+WEEKDAYS[sd]+'第'+(sp+1)+'节';
     }
     touched.forEach(function(k){ if(state.grid[k] && !state.grid[k].length) delete state.grid[k]; });
-    var before = snapshotKeys(touched);
     history.push({ desc:desc, keys:touched, before:before });
     save(); render();
   }
