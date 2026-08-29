@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>电子记课表</title>
+<style>
+  /* ============ 主题变量（5 套液态玻璃主题） ============ */
+  :root, body[data-theme="dawn"]{
+    --bg1:#eef1ff; --bg2:#fdf2f8;
+    --glass:rgba(255,255,255,.60);
+    --glass-strong:rgba(255,255,255,.86);
+    --line:rgba(120,120,160,.18);
+    --ink:#2c2f45;
+    --ink-soft:#6b7089;
+    --accent:#6d7cff;
+    --accent-2:#f472b6;
+    --today:rgba(253,224,71,.38);
+    --shadow:0 10px 34px rgba(90,100,180,.14);
+  }
+  body[data-theme="warm"]{
+    --bg1:#fff6e9; --bg2:#ffeef1;
+    --glass:rgba(255,255,255,.62);
+    --line:rgba(200,150,100,.22);
+    --ink:#4a3a28;
+    --ink-soft:#8a7357;
+    --accent:#ff9d5c;
+    --accent-2:#ff7a9e;
+    --today:rgba(255,200,120,.45);
+    --shadow:0 10px 34px rgba(220,150,90,.16);
+  }
+  body[data-theme="forest"]{
+    --bg1:#eafaf0; --bg2:#e9f4ff;
+    --glass:rgba(255,255,255,.62);
+    --line:rgba(90,160,130,.22);
+    --ink:#2c4438;
+    --ink-soft:#5d7f6c;
+    --accent:#34b37e;
+    --accent-2:#5fb2e8;
+    --today:rgba(180,230,150,.5);
+    --shadow:0 10px 34px rgba(80,160,120,.16);
+  }
+  body[data-theme="dusk"]{
+    --bg1:#f3efff; --bg2:#ffeefc;
+    --glass:rgba(255,255,255,.62);
+    --line:rgba(160,130,220,.22);
+    --ink:#3a2f52;
+    --ink-soft:#7d6f9c;
+    --accent:#8a6cf0;
+    --accent-2:#f06ca0;
+    --today:rgba(220,180,255,.42);
+    --shadow:0 10px 34px rgba(140,110,220,.16);
+  }
+  body[data-theme="blank"]{
+    --bg1:#f7f8fa; --bg2:#eef0f4;
+    --glass:rgba(255,255,255,.8);
+    --glass-strong:rgba(255,255,255,.94);
+    --line:rgba(0,0,0,.1);
+    --ink:#333;
+    --ink-soft:#777;
+    --accent:#3b82f6;
+    --accent-2:#06b6d4;
+    --today:rgba(250,204,21,.4);
+    --shadow:0 10px 30px rgba(0,0,0,.08);
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei","Segoe UI",sans-serif;
+    color:var(--ink);
+    background:linear-gradient(135deg,var(--bg1),var(--bg2)) fixed;
+    padding:26px 32px 56px;
+    font-size:16px;
+  }
+  /* 背景图图层 */
+  #bgLayer{
+    position:fixed;inset:0;z-index:-1;pointer-events:none;
+    background-size:cover;background-position:center;background-repeat:no-repeat;
+    transition:filter .2s;
+  }
+  .glass{
+    background:var(--glass);
+    backdrop-filter:blur(20px) saturate(1.3);
+    -webkit-backdrop-filter:blur(20px) saturate(1.3);
+    border:1px solid var(--line);
+    border-radius:26px;
+    box-shadow:var(--shadow);
+  }
+
+  /* ============ 顶部 ============ */
+  header{
+    display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+    padding:24px 30px;margin-bottom:24px;
+  }
+  header h1{font-size:30px;font-weight:800;letter-spacing:.5px}
+  header .sub{color:var(--ink-soft);font-size:16px;margin-top:3px}
+  #weekBadge{
+    margin-left:auto;background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    color:#fff;padding:12px 22px;border-radius:999px;font-size:17px;font-weight:700;
+    box-shadow:0 8px 22px rgba(109,124,255,.35);white-space:nowrap;
+  }
+  .btn{
+    border:none;cursor:pointer;font-size:16px;font-family:inherit;
+    padding:13px 22px;border-radius:999px;color:#fff;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    box-shadow:0 8px 20px rgba(109,124,255,.30);
+    transition:transform .12s, box-shadow .12s;
+  }
+  .btn:hover{transform:translateY(-1px)}
+  .btn.ghost{
+    background:rgba(255,255,255,.5);color:var(--ink);
+    box-shadow:none;border:1px solid var(--line);
+  }
+  .btn.small{padding:9px 16px;font-size:14px}
+  .btn.danger{background:linear-gradient(135deg,#f87171,#ef4444)}
+
+  /* 主题切换 */
+  .theme-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+  .theme-label{font-size:14px;color:var(--ink-soft);font-weight:600}
+  .theme-btn{
+    border:2px solid var(--line);cursor:pointer;padding:8px 14px;border-radius:999px;
+    font-size:14px;font-family:inherit;background:var(--glass);color:var(--ink);
+    transition:all .15s;display:flex;align-items:center;gap:6px;
+  }
+  .theme-btn .dot{width:14px;height:14px;border-radius:50%;display:inline-block;border:1px solid rgba(0,0,0,.08)}
+  .theme-btn.active{border-color:var(--accent);box-shadow:0 0 0 3px rgba(109,124,255,.25)}
+
+  /* ============ 主体布局 ============ */
+  #appMain{display:flex;gap:24px;align-items:flex-start}
+  #gridWrap{flex:1 1 auto;min-width:0;padding:26px 30px}
+  .card-head{display:flex;align-items:baseline;gap:14px;margin-bottom:18px;flex-wrap:wrap}
+  .card-head h2{font-size:24px;font-weight:800}
+  .card-head .hint{color:var(--ink-soft);font-size:15px}
+
+  /* ============ 课表表格（宽松大字号） ============ */
+  #grid{width:100%;border-collapse:separate;border-spacing:10px;table-layout:fixed}
+  #grid th{
+    padding:14px 10px;font-size:19px;font-weight:800;text-align:center;
+    border-radius:16px;background:rgba(255,255,255,.55);border:1px solid var(--line);
+  }
+  #grid td{
+    padding:10px;vertical-align:top;text-align:center;min-height:92px;
+    border-radius:16px;background:rgba(255,255,255,.40);border:1px solid var(--line);
+    cursor:pointer;transition:background .15s;
+  }
+  #grid td:hover{background:rgba(255,255,255,.78)}
+  #grid td.period-col{background:rgba(255,255,255,.55);cursor:default;font-weight:700;font-size:17px}
+  #grid td.period-col small{display:block;color:var(--ink-soft);font-weight:500;font-size:14px;margin-top:5px}
+  #grid td.today{background:var(--today);border-color:rgba(240,180,40,.55)}
+  .entry{
+    display:flex;flex-direction:column;gap:3px;padding:8px 10px;margin:4px 0;
+    background:rgba(255,255,255,.85);border-radius:12px;border:1px solid var(--line);
+    text-align:left;
+  }
+  .entry .course{font-weight:800;font-size:17px}
+  .entry .cls{color:var(--ink-soft);font-size:14px;line-height:1.4}
+  .entry .note-tag{color:var(--accent-2);font-size:13px}
+  .empty-hint{color:#b9bdd6;font-size:15px;line-height:24px}
+
+  /* ============ 侧栏 ============ */
+  #swapPanel{width:330px;flex-shrink:0;padding:26px 26px}
+  #swapPanel h3{font-size:21px;font-weight:800;margin-bottom:18px}
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:15px;color:var(--ink-soft);margin-bottom:7px;font-weight:600}
+  select,input[type=text],input[type=number],input[type=date],textarea{
+    width:100%;padding:12px 14px;font-size:16px;font-family:inherit;color:var(--ink);
+    border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.75);
+    outline:none;
+  }
+  select:focus,input:focus,textarea:focus{border-color:var(--accent)}
+  textarea{resize:vertical;min-height:80px;line-height:1.6}
+  .swap-actions{display:flex;gap:10px;margin-top:8px}
+  .swap-actions .btn{flex:1}
+  .hist-list{margin-top:20px;max-height:240px;overflow:auto}
+  .hist-list h4{font-size:15px;color:var(--ink-soft);margin-bottom:9px}
+  .hist-item{
+    font-size:14px;padding:9px 12px;border-radius:12px;background:rgba(255,255,255,.55);
+    margin-bottom:7px;border:1px solid var(--line);line-height:1.5;
+  }
+  .hist-empty{color:#b9bdd6;font-size:14px}
+
+  /* ============ 弹窗 ============ */
+  .modal-backdrop{
+    position:fixed;inset:0;background:rgba(30,34,70,.38);backdrop-filter:blur(5px);
+    display:none;align-items:center;justify-content:center;z-index:50;
+  }
+  .modal-backdrop.show{display:flex}
+  .modal{width:min(640px,94vw);max-height:88vh;overflow:auto;padding:28px 32px}
+  .modal h3{font-size:23px;font-weight:800;margin-bottom:18px}
+  .modal h4{font-size:16px;font-weight:700;margin:20px 0 12px}
+  .close-x{
+    position:absolute;top:16px;right:20px;border:none;background:rgba(0,0,0,.06);
+    width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:20px;color:var(--ink-soft);
+  }
+  .modal .row{display:flex;gap:12px;flex-wrap:wrap}
+  .modal .row .field{flex:1;min-width:130px}
+  .modal .field.full{flex:0 0 100%}
+  .entry-edit-item{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:11px 15px;border-radius:12px;background:rgba(255,255,255,.55);
+    border:1px solid var(--line);margin-bottom:9px;
+  }
+  .entry-edit-item .info{font-size:15px;line-height:1.5}
+  .entry-edit-item .info small{color:var(--ink-soft)}
+  .del-btn{border:none;background:rgba(244,114,150,.15);color:#db2f6a;border-radius:10px;padding:7px 14px;cursor:pointer;font-size:14px}
+
+  /* 背景设置块 */
+  .bg-panel{margin-top:22px;padding-top:18px;border-top:1px dashed var(--line)}
+  .bg-panel h4{font-size:16px;font-weight:700;margin-bottom:12px}
+  .bg-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .bg-row .btn{margin-right:4px}
+  .bg-row input[type=range]{flex:1;min-width:140px}
+  .bg-blur-val{font-size:14px;color:var(--ink-soft);min-width:52px}
+
+  /* 备份操作 */
+  .backup-ops{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+
+  /* ============ 打印（干净版式） ============ */
+  @media print{
+    header .actions,#swapPanel,#printBtn,.modal-backdrop,.theme-bar,#bgLayer{display:none !important}
+    body{background:#fff !important;padding:0}
+    header{box-shadow:none;border:none;padding:0 0 14px}
+    header h1{font-size:22px}
+    #weekBadge{margin-left:0;background:none;color:#333;box-shadow:none;padding:4px 0;font-size:15px}
+    #appMain{display:block}
+    #gridWrap{box-shadow:none;border:none;border-radius:0;padding:0}
+    #grid{border-spacing:0;width:100%}
+    #grid th,#grid td{border:1px solid #999;border-radius:0;background:#fff;color:#000;font-size:13px}
+    #grid td{min-height:44px}
+    #grid td.today{background:#ffe9a8}
+    .entry{background:#fff;border:1px solid #ccc}
+    .entry .course{font-size:14px}
+    .entry .cls{font-size:11px}
+    .entry .note-tag{display:none}
+  }
+</style>
+</head>
+<body>
+
+<div id="bgLayer"></div>
+
+<header class="glass">
+  <div>
+    <h1>电子记课表</h1>
+    <div class="sub" id="headerSub">教师节礼物 · 让上课安排一目了然</div>
+    <div class="theme-bar">
+      <span class="theme-label">主题：</span>
+      <button class="theme-btn" data-theme="dawn"><span class="dot" style="background:linear-gradient(135deg,#eef1ff,#fdf2f8)"></span>晨雾</button>
+      <button class="theme-btn" data-theme="warm"><span class="dot" style="background:linear-gradient(135deg,#fff6e9,#ffeef1)"></span>暖阳</button>
+      <button class="theme-btn" data-theme="forest"><span class="dot" style="background:linear-gradient(135deg,#eafaf0,#e9f4ff)"></span>森语</button>
+      <button class="theme-btn" data-theme="dusk"><span class="dot" style="background:linear-gradient(135deg,#f3efff,#ffeefc)"></span>暮紫</button>
+      <button class="theme-btn" data-theme="blank"><span class="dot" style="background:#fff"></span>留白</button>
+    </div>
+  </div>
+  <div id="weekBadge"></div>
+  <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap">
+    <button class="btn ghost" id="btnSettings">课表设置</button>
+    <button class="btn ghost" id="btnBg">背景</button>
+    <button class="btn ghost" id="btnMemo">备忘录</button>
+    <button class="btn" id="printBtn">打印课表</button>
+  </div>
+</header>
+
+<main id="appMain">
+  <section id="gridWrap" class="glass">
+    <div class="card-head">
+      <h2>本周课表</h2>
+      <span class="hint">点击任意格子添加 / 编辑课程 · 今天列已高亮 · 鼠标悬停看备注</span>
+    </div>
+    <div id="gridContainer"></div>
+  </section>
+
+  <aside id="swapPanel" class="glass">
+    <h3>智能换课</h3>
+    <div class="field">
+      <label>操作方式</label>
+      <select id="opType">
+        <option value="swap">对调（两格互换）</option>
+        <option value="move">移动（挪到另一格）</option>
+        <option value="change">改成（整格替换为课程）</option>
+        <option value="clear">清空（删除整格内容）</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>源位置（周几）</label>
+      <select id="srcDay"></select>
+    </div>
+    <div class="field">
+      <label>源位置（第几节）</label>
+      <select id="srcPeriod"></select>
+    </div>
+    <div class="field">
+      <label>目标位置（周几）</label>
+      <select id="dstDay"></select>
+    </div>
+    <div class="field">
+      <label>目标位置（第几节）</label>
+      <select id="dstPeriod"></select>
+    </div>
+    <div class="field" id="courseField">
+      <label>课程（用于「改成」）</label>
+      <select id="opCourse"></select>
+    </div>
+    <div class="swap-actions">
+      <button class="btn" id="btnSwap">执行换课</button>
+      <button class="btn ghost" id="btnUndo">撤销</button>
+    </div>
+    <div class="hist-list">
+      <h4>换课历史</h4>
+      <div id="histBox"><div class="hist-empty">暂无操作</div></div>
+    </div>
+  </aside>
+</main>
+
+<!-- 首次引导 / 设置 弹窗 -->
+<div class="modal-backdrop" id="setupBackdrop">
+  <div class="modal glass" style="position:relative">
+    <button class="close-x" data-close="setupBackdrop">×</button>
+    <h3 id="setupTitle">首次使用 · 创建课表</h3>
+    <div class="field"><label>老师名</label><input type="text" id="inpTeacher" placeholder="如：王老师"></div>
+    <div class="row">
+      <div class="field"><label>第 1 周周一日期</label><input type="date" id="inpDate"></div>
+      <div class="field"><label>每天节数</label><input type="number" id="inpPeriods" min="1" max="12" value="8"></div>
+      <div class="field"><label>班级数</label><input type="number" id="inpClasses" min="1" max="12" value="3"></div>
+      <div class="field"><label>任教年级</label><select id="inpGrade"></select></div>
+    </div>
+    <div class="field full">
+      <label>节次时间（每行一节，格式 开始-结束，行数不够的节次时间留空）</label>
+      <textarea id="inpTimes" rows="6"></textarea>
+    </div>
+    <div class="field full">
+      <label>常用门牌号（每行一个，用于下拉选择，可随时修改）</label>
+      <textarea id="inpRooms" rows="4" placeholder="如：&#10;教学楼A-101&#10;教学楼A-102&#10;实验楼-201"></textarea>
+    </div>
+    <div style="text-align:right;margin-top:10px">
+      <button class="btn" id="btnSaveSetup">保存并开始使用</button>
+    </div>
+  </div>
+</div>
+
+<!-- 背景设置 弹窗 -->
+<div class="modal-backdrop" id="bgBackdrop">
+  <div class="modal glass" style="position:relative">
+    <button class="close-x" data-close="bgBackdrop">×</button>
+    <h3>背景设置</h3>
+    <div class="field">
+      <label>上传本地图片作为背景</label>
+      <div class="bg-row">
+        <button class="btn ghost" id="btnPickBg">选择图片…</button>
+        <input type="file" id="bgFile" accept="image/*" style="display:none">
+        <button class="btn danger small" id="btnRemoveBg">移除背景</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>背景模糊度：<span class="bg-blur-val" id="bgBlurVal">8</span></label>
+      <input type="range" id="bgBlur" min="0" max="30" value="8">
+    </div>
+    <div style="text-align:right;margin-top:10px">
+      <button class="btn" data-close="bgBackdrop">完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- 单元格编辑 弹窗 -->
+<div class="modal-backdrop" id="cellBackdrop">
+  <div class="modal glass" style="position:relative">
+    <button class="close-x" data-close="cellBackdrop">×</button>
+    <h3>编辑格子 <span id="cellTitle" style="color:var(--ink-soft);font-size:16px"></span></h3>
+    <h4>当前条目</h4>
+    <div id="entryList"></div>
+    <h4>添加条目</h4>
+    <div class="row">
+      <div class="field"><label>课程</label><select id="addCourse"></select></div>
+      <div class="field"><label>年级</label><select id="addGrade"></select></div>
+      <div class="field"><label>班级</label><select id="addCls"></select></div>
+      <div class="field"><label>门牌号</label>
+        <input type="text" id="addRoom" list="roomList" placeholder="选择或输入">
+        <datalist id="roomList"></datalist>
+      </div>
+    </div>
+    <div class="field" style="margin-top:6px"><label>备注（悬停单元格可见）</label><input type="text" id="addNote" placeholder="如：带实验器材"></div>
+    <div style="text-align:right;margin-top:10px">
+      <button class="btn" id="btnAddEntry">添加条目</button>
+    </div>
+  </div>
+</div>
+
+<!-- 备忘录 弹窗 -->
+<div class="modal-backdrop" id="memoBackdrop">
+  <div class="modal glass" style="position:relative">
+    <button class="close-x" data-close="memoBackdrop">×</button>
+    <h3>全局备忘录</h3>
+    <div class="field"><label>随手记下待办 / 提醒（自动保存）</label>
+      <textarea id="inpMemo" rows="8" placeholder="如：周三下午开会，课表先不动…"></textarea>
+    </div>
+    <div style="text-align:right;margin-top:10px">
+      <button class="btn" data-close="memoBackdrop">完成</button>
+    </div>
+    <div class="backup-ops">
+      <button class="btn ghost" id="btnExport">导出备份</button>
+      <button class="btn ghost" id="btnImport">导入备份</button>
+      <input type="file" id="importFile" accept=".json" style="display:none">
+    </div>
+    <p style="font-size:13px;color:var(--ink-soft);margin-top:8px">备份文件包含全部课表、主题与背景设置，换电脑时导入即可恢复。</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var STORAGE_KEY = 'elec_schedule_full_v1';
+  var COURSES = ['语文','数学','英语','物理','化学','生物','道法','历史','地理','体育','音乐','美术','信息技术','自习','班会'];
+  var GRADES  = ['六年级','七年级','八年级','九年级'];
+  var WEEKDAYS = ['周一','周二','周三','周四','周五'];
+  var THEMES = ['dawn','warm','forest','dusk','blank'];
+  var DEFAULT_ROOMS = ['教学楼A-101','教学楼A-102','教学楼A-103','教学楼A-201','教学楼A-202','教学楼B-101','教学楼B-102','实验楼-201','实验楼-202','机房-301','音乐室-101','操场','报告厅'];
+
+  // ---------- 状态 ----------
+  var state = load();
+  var cellKey = null;      // 当前正在编辑的格子 "d-p"
+  var history = [];        // 换课历史（内存）
+
+  // ---------- 工具 ----------
+  function load(){
+    try{
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if(!raw) return null;
+      var obj = JSON.parse(raw);
+      // 默认字段补齐
+      if(!obj.grid) obj.grid = {};
+      if(!obj.memo) obj.memo = '';
+      if(!obj.theme) obj.theme = 'dawn';
+      if(!obj.rooms) obj.rooms = [];
+      if(obj.bgBlur == null) obj.bgBlur = 8;
+      return obj;
+    }catch(e){ return null; }
+  }
+  function save(){
+    try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){
+      alert('保存失败：存储空间不足，可能背景图片过大，请换小一点的图片。');
+    }
+  }
+  function esc(s){
+    return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function todayIdx(){
+    return (new Date().getDay()+6)%7; // 周一=0 ... 周日=6
+  }
+  function weekNumber(){
+    if(!state || !state.week1) return 1;
+    var t = new Date(state.week1 + 'T00:00:00');
+    var n = new Date();
+    n.setHours(0,0,0,0);
+    var diff = Math.round((n - t)/86400000);
+    if(diff < 0) return 1;
+    return Math.floor(diff/7) + 1;
+  }
+  function key(d,p){ return d + '-' + p; }
+  function cell(d,p){
+    var k = key(d,p);
+    if(!state.grid[k]) state.grid[k] = [];
+    return state.grid[k];
+  }
+  function clsOptions(){
+    var n = state.classes || 3, out = [];
+    for(var i=1;i<=n;i++){ var s = ('0'+i).slice(-2); out.push(s); }
+    return out;
+  }
+  function roomOptions(){
+    var all = DEFAULT_ROOMS.slice();
+    (state.rooms||[]).forEach(function(r){ if(r && all.indexOf(r)<0) all.push(r); });
+    return all;
+  }
+  function fillSel(sel, arr, selected){
+    sel.innerHTML = arr.map(function(v){
+      return '<option value="'+esc(v)+'"'+(v===selected?' selected':'')+'>'+esc(v)+'</option>';
+    }).join('');
+  }
+  function fillDatalist(list, arr){
+    list.innerHTML = arr.map(function(v){
+      return '<option value="'+esc(v)+'">';
+    }).join('');
+  }
+  function pad(n){ return ('0'+n).slice(-2); }
+  function dateToStr(d){
+    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  }
+  function mondayOf(d){
+    var t = new Date(d); t.setHours(0,0,0,0);
+    var w = (t.getDay()+6)%7;
+    t.setDate(t.getDate()-w);
+    return t;
+  }
+
+  // ---------- 渲染 ----------
+  function render(){
+    applyTheme();
+    applyBackground();
+    renderHeader();
+    renderGrid();
+    renderSwapOptions();
+    renderHistory();
+  }
+  function applyTheme(){
+    var t = THEMES.indexOf(state.theme)>=0 ? state.theme : 'dawn';
+    document.body.setAttribute('data-theme', t);
+    document.querySelectorAll('.theme-btn').forEach(function(btn){
+      btn.classList.toggle('active', btn.getAttribute('data-theme')===t);
+    });
+  }
+  function applyBackground(){
+    var layer = document.getElementById('bgLayer');
+    if(state.bg){
+      layer.style.backgroundImage = 'url("'+state.bg+'")';
+      layer.style.filter = 'blur('+(state.bgBlur||8)+'px)';
+    } else {
+      layer.style.backgroundImage = 'none';
+      layer.style.filter = 'none';
+    }
+    document.getElementById('bgBlurVal').textContent = state.bgBlur||8;
+    document.getElementById('bgBlur').value = state.bgBlur||8;
+  }
+  function renderHeader(){
+    document.getElementById('headerSub').textContent =
+      (state.teacher? state.teacher + ' 老师 · ' : '') + '教师节礼物 · 让上课安排一目了然';
+    var badge = document.getElementById('weekBadge');
+    var today = WEEKDAYS[todayIdx()] || '今天';
+    badge.textContent = '当前第 ' + weekNumber() + ' 周 · ' + today;
+  }
+  function renderGrid(){
+    var box = document.getElementById('gridContainer');
+    var P = state.periods;
+    var rows = '';
+    rows += '<tr><th style="width:120px">节次</th>';
+    for(var d=0;d<5;d++){
+      rows += '<th'+(d===todayIdx()?' style="color:#b45309"':'')+'>'+WEEKDAYS[d]+'</th>';
+    }
+    rows += '</tr>';
+    for(var p=0;p<P;p++){
+      rows += '<tr>';
+      var t = state.times && state.times[p] ? state.times[p] : '';
+      rows += '<td class="period-col">第 '+(p+1)+' 节'+(t?'<small>'+esc(t)+'</small>':'')+'</td>';
+      for(var d=0;d<5;d++){
+        var arr = cell(d,p);
+        var notes = arr.filter(function(e){return e.note;})
+                       .map(function(e){return e.course+': '+e.note;}).join('；');
+        rows += '<td'+(d===todayIdx()?' class="today"':'')+' data-key="'+key(d,p)+'"';
+        rows += notes ? ' title="'+esc(notes)+'"' : '';
+        rows += '>';
+        if(!arr.length){
+          rows += '<div class="empty-hint">＋<br>点这里</div>';
+        } else {
+          arr.forEach(function(e){
+            rows += '<div class="entry">'
+                 +   '<span class="course">'+esc(e.course)+'</span>'
+                 +   '<span class="cls">'+esc(e.grade)+' '+esc(e.cls)+'班'+(e.room?' · '+esc(e.room):'')+'</span>'
+                 +   (e.note ? '<span class="note-tag">📌 '+esc(e.note)+'</span>' : '')
+                 + '</div>';
+          });
+        }
+        rows += '</td>';
+      }
+      rows += '</tr>';
+    }
+    box.innerHTML = '<table id="grid">'+rows+'</table>';
+    box.querySelectorAll('#grid td[data-key]').forEach(function(td){
+      td.addEventListener('click', function(){
+        openCell(parseInt(this.dataset.key.split('-')[0],10),
+                 parseInt(this.dataset.key.split('-')[1],10));
+      });
+    });
+  }
+  function renderSwapOptions(){
+    var srcDay=document.getElementById('srcDay'), dstDay=document.getElementById('dstDay');
+    var srcPer=document.getElementById('srcPeriod'), dstPer=document.getElementById('dstPeriod');
+    srcDay.innerHTML = dstDay.innerHTML = WEEKDAYS.map(function(w,i){
+      return '<option value="'+i+'">'+w+'</option>';
+    }).join('');
+    var P = state.periods, perOpts = '';
+    for(var p=0;p<P;p++){ perOpts += '<option value="'+p+'">第 '+(p+1)+' 节</option>'; }
+    srcPer.innerHTML = dstPer.innerHTML = perOpts;
+    fillSel(document.getElementById('opCourse'), COURSES, COURSES[0]);
+  }
+  function renderHistory(){
+    var box = document.getElementById('histBox');
+    if(!history.length){
+      box.innerHTML = '<div class="hist-empty">暂无操作</div>';
+      return;
+    }
+    box.innerHTML = history.map(function(h){
+      return '<div class="hist-item">'+esc(h.desc)+'</div>';
+    }).join('');
+  }
+
+  // ---------- 首次引导 / 设置 ----------
+  function openSetup(firstTime){
+    document.getElementById('setupTitle').textContent = firstTime ? '首次使用 · 创建课表' : '课表设置';
+    document.getElementById('inpTeacher').value = state.teacher || '';
+    document.getElementById('inpDate').value = state.week1 || dateToStr(mondayOf(new Date()));
+    document.getElementById('inpPeriods').value = state.periods || 8;
+    document.getElementById('inpClasses').value = state.classes || 3;
+    fillSel(document.getElementById('inpGrade'), GRADES, state.grade || GRADES[0]);
+    var times = (state.times && state.times.length) ? state.times.join('\n') : defaultTimes();
+    document.getElementById('inpTimes').value = times;
+    document.getElementById('inpRooms').value = (state.rooms||[]).join('\n');
+    showModal('setupBackdrop');
+  }
+  function defaultTimes(){
+    var defs = ['08:00-08:45','08:55-09:40','10:00-10:45','10:55-11:40',
+                '14:00-14:45','14:55-15:40','16:00-16:45','16:55-17:40'];
+    return defs.join('\n');
+  }
+  function saveSetup(){
+    var teacher = document.getElementById('inpTeacher').value.trim();
+    if(!teacher){ alert('请填写老师名'); return; }
+    var periods = parseInt(document.getElementById('inpPeriods').value,10)||8;
+    var classes = parseInt(document.getElementById('inpClasses').value,10)||3;
+    var lines = document.getElementById('inpTimes').value.split('\n').map(function(s){return s.trim();});
+    var times = [];
+    for(var p=0;p<periods;p++){ times.push(lines[p]||''); }
+    var rooms = document.getElementById('inpRooms').value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    state = {
+      teacher: teacher,
+      week1: document.getElementById('inpDate').value || dateToStr(mondayOf(new Date())),
+      periods: periods,
+      classes: classes,
+      grade: document.getElementById('inpGrade').value,
+      times: times,
+      rooms: rooms,
+      theme: state.theme || 'dawn',
+      bg: state.bg || null,
+      bgBlur: (state.bgBlur!=null? state.bgBlur : 8),
+      grid: (state && state.grid) || {},
+      memo: (state && state.memo) || ''
+    };
+    save();
+    hideModal('setupBackdrop');
+    render();
+  }
+
+  // ---------- 背景 ----------
+  function openBg(){
+    document.getElementById('bgBlur').value = state.bgBlur||8;
+    document.getElementById('bgBlurVal').textContent = state.bgBlur||8;
+    showModal('bgBackdrop');
+  }
+  function pickBg(file){
+    if(!file) return;
+    if(file.size > 4*1024*1024){ alert('图片过大（超过 4MB），请选小一点的图片'); return; }
+    var reader = new FileReader();
+    reader.onload = function(e){
+      // 压缩到最大宽度 1800，避免撑爆 localStorage
+      var img = new Image();
+      img.onload = function(){
+        var maxW = 1800;
+        var ratio = Math.min(1, maxW / img.width);
+        var w = Math.round(img.width*ratio), h = Math.round(img.height*ratio);
+        var cv = document.createElement('canvas');
+        cv.width = w; cv.height = h;
+        cv.getContext('2d').drawImage(img, 0, 0, w, h);
+        state.bg = cv.toDataURL('image/jpeg', 0.8);
+        state.bgBlur = state.bgBlur||8;
+        save(); applyBackground();
+      };
+      img.onerror = function(){ alert('图片读取失败'); };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+  function removeBg(){
+    state.bg = null;
+    save(); applyBackground();
+  }
+
+  // ---------- 备份 ----------
+  function exportBackup(){
+    var data = JSON.stringify(state, null, 2);
+    var blob = new Blob([data], {type:'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '电子记课表备份_' + (state.teacher||'课表') + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  function importBackup(file){
+    if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e){
+      try{
+        var obj = JSON.parse(e.target.result);
+        if(!obj || typeof obj !== 'object' || !obj.teacher){ throw new Error('bad'); }
+        if(!obj.grid) obj.grid = {};
+        if(!obj.memo) obj.memo = '';
+        if(!obj.theme) obj.theme = 'dawn';
+        if(!obj.rooms) obj.rooms = [];
+        if(obj.bgBlur == null) obj.bgBlur = 8;
+        state = obj;
+        save(); render();
+        alert('导入成功！');
+      }catch(err){
+        alert('导入失败：文件格式不正确');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // ---------- 单元格编辑 ----------
+  function openCell(d,p){
+    cellKey = key(d,p);
+    document.getElementById('cellTitle').textContent = WEEKDAYS[d] + ' · 第 '+(p+1)+' 节';
+    fillSel(document.getElementById('addCourse'), COURSES, COURSES[0]);
+    fillSel(document.getElementById('addGrade'), GRADES, state.grade || GRADES[0]);
+    fillSel(document.getElementById('addCls'), clsOptions(), clsOptions()[0]);
+    fillDatalist(document.getElementById('roomList'), roomOptions());
+    document.getElementById('addRoom').value = '';
+    document.getElementById('addNote').value = '';
+    renderEntryList();
+    showModal('cellBackdrop');
+  }
+  function renderEntryList(){
+    var box = document.getElementById('entryList');
+    var arr = cellKey ? (state.grid[cellKey] || []) : [];
+    if(!arr.length){
+      box.innerHTML = '<div class="hist-empty">这个格子还是空的</div>';
+      return;
+    }
+    box.innerHTML = arr.map(function(e,i){
+      return '<div class="entry-edit-item">'
+           +   '<div class="info"><strong>'+esc(e.course)+'</strong> · '+esc(e.grade)+' '+esc(e.cls)+'班'
+           +   (e.room ? ' · '+esc(e.room) : '')
+           +   (e.note ? '<br><small>📌 '+esc(e.note)+'</small>' : '')
+           +   '</div>'
+           +   '<button class="del-btn" data-i="'+i+'">删除</button>'
+           + '</div>';
+    }).join('');
+    box.querySelectorAll('.del-btn').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var arr2 = state.grid[cellKey];
+        arr2.splice(parseInt(this.dataset.i,10),1);
+        if(!arr2.length) delete state.grid[cellKey];
+        save(); renderEntryList(); renderGrid(); renderHeader();
+      });
+    });
+  }
+  function addEntry(){
+    if(!cellKey) return;
+    var e = {
+      course: document.getElementById('addCourse').value,
+      grade: document.getElementById('addGrade').value,
+      cls: document.getElementById('addCls').value,
+      room: document.getElementById('addRoom').value.trim(),
+      note: document.getElementById('addNote').value.trim()
+    };
+    cell(parseInt(cellKey.split('-')[0],10), parseInt(cellKey.split('-')[1],10)).push(e);
+    save();
+    document.getElementById('addRoom').value = '';
+    document.getElementById('addNote').value = '';
+    renderEntryList(); renderGrid(); renderHeader();
+  }
+
+  // ---------- 换课 ----------
+  function snapshotKeys(keysArr){
+    var snap = {};
+    keysArr.forEach(function(k){ snap[k] = JSON.parse(JSON.stringify(state.grid[k]||[])); });
+    return snap;
+  }
+  function performSwap(){
+    var op = document.getElementById('opType').value;
+    var sd = parseInt(document.getElementById('srcDay').value,10);
+    var sp = parseInt(document.getElementById('srcPeriod').value,10);
+    var dd = parseInt(document.getElementById('dstDay').value,10);
+    var dp = parseInt(document.getElementById('dstPeriod').value,10);
+    var sk = key(sd,sp), dk = key(dd,dp);
+    var touched, desc;
+
+    if(op==='swap'){
+      var a = state.grid[sk]||[]; var b = state.grid[dk]||[];
+      state.grid[sk] = JSON.parse(JSON.stringify(b));
+      state.grid[dk] = JSON.parse(JSON.stringify(a));
+      touched = [sk,dk];
+      desc = '对调：'+WEEKDAYS[sd]+'第'+(sp+1)+'节 ↔ '+WEEKDAYS[dd]+'第'+(dp+1)+'节';
+    } else if(op==='move'){
+      var src = state.grid[sk]||[];
+      if(!src.length){ alert('源格子是空的，没有可移动的内容'); return; }
+      if(!state.grid[dk]) state.grid[dk] = [];
+      state.grid[dk] = state.grid[dk].concat(JSON.parse(JSON.stringify(src)));
+      delete state.grid[sk];
+      touched = [sk,dk];
+      desc = '移动：'+WEEKDAYS[sd]+'第'+(sp+1)+'节 → '+WEEKDAYS[dd]+'第'+(dp+1)+'节';
+    } else if(op==='change'){
+      var course = document.getElementById('opCourse').value;
+      state.grid[sk] = [{ course:course, grade:state.grade||GRADES[0], cls:clsOptions()[0], room:'', note:'' }];
+      touched = [sk];
+      desc = '改成：'+WEEKDAYS[sd]+'第'+(sp+1)+'节 → '+course;
+    } else {
+      delete state.grid[sk];
+      touched = [sk];
+      desc = '清空：'+WEEKDAYS[sd]+'第'+(sp+1)+'节';
+    }
+    touched.forEach(function(k){ if(state.grid[k] && !state.grid[k].length) delete state.grid[k]; });
+    var before = snapshotKeys(touched);
+    history.push({ desc:desc, keys:touched, before:before });
+    save(); render();
+  }
+  function undoSwap(){
+    if(!history.length){ alert('没有可撤销的操作'); return; }
+    var h = history.pop();
+    h.keys.forEach(function(k){
+      if(h.before[k]) state.grid[k] = JSON.parse(JSON.stringify(h.before[k]));
+      else delete state.grid[k];
+    });
+    save(); render();
+  }
+
+  // ---------- 弹窗 ----------
+  function showModal(id){
+    document.getElementById(id).classList.add('show');
+  }
+  function hideModal(id){
+    document.getElementById(id).classList.remove('show');
+  }
+
+  // ---------- 初始化 ----------
+  function init(){
+    if(!state){
+      state = { grid:{}, memo:'', teacher:'', week1:'', periods:8, classes:3, grade:GRADES[0], times:[], rooms:[], theme:'dawn', bg:null, bgBlur:8 };
+      render();
+      openSetup(true);
+      return;
+    }
+    render();
+  }
+
+  // 事件绑定
+  document.getElementById('btnSaveSetup').addEventListener('click', saveSetup);
+  document.getElementById('btnSettings').addEventListener('click', function(){ openSetup(false); });
+  document.getElementById('btnBg').addEventListener('click', openBg);
+  document.getElementById('btnPickBg').addEventListener('click', function(){ document.getElementById('bgFile').click(); });
+  document.getElementById('bgFile').addEventListener('change', function(){ pickBg(this.files[0]); });
+  document.getElementById('btnRemoveBg').addEventListener('click', removeBg);
+  document.getElementById('bgBlur').addEventListener('input', function(){
+    state.bgBlur = parseInt(this.value,10)||0;
+    document.getElementById('bgBlurVal').textContent = state.bgBlur;
+    if(state.bg) applyBackground();
+    save();
+  });
+  document.querySelectorAll('.theme-btn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      state.theme = this.getAttribute('data-theme');
+      save(); applyTheme();
+    });
+  });
+  document.getElementById('btnMemo').addEventListener('click', function(){
+    document.getElementById('inpMemo').value = state.memo || '';
+    showModal('memoBackdrop');
+  });
+  document.getElementById('inpMemo').addEventListener('input', function(){
+    state.memo = this.value; save();
+  });
+  document.getElementById('btnExport').addEventListener('click', exportBackup);
+  document.getElementById('btnImport').addEventListener('click', function(){ document.getElementById('importFile').click(); });
+  document.getElementById('importFile').addEventListener('change', function(){ importBackup(this.files[0]); });
+  document.getElementById('btnAddEntry').addEventListener('click', addEntry);
+  document.getElementById('btnSwap').addEventListener('click', performSwap);
+  document.getElementById('btnUndo').addEventListener('click', undoSwap);
+  document.getElementById('printBtn').addEventListener('click', function(){ window.print(); });
+  document.querySelectorAll('.close-x, [data-close]').forEach(function(el){
+    el.addEventListener('click', function(){ hideModal(el.dataset.close); });
+  });
+  document.querySelectorAll('.modal-backdrop').forEach(function(bd){
+    bd.addEventListener('click', function(e){
+      if(e.target===bd) bd.classList.remove('show');
+    });
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>
