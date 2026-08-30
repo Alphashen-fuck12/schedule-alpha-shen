@@ -3411,7 +3411,7 @@ var GENERIC_BLESSINGS = [
   }
   function renderHeader(){
     document.getElementById('headerSub').textContent =
-      (state.teacher? state.teacher + ' 老师 · ' : '') + '每日祝福 · 让上课安排一目了然';
+      (state.teacher? genericTeacherName() + ' · ' : '') + '每日祝福 · 让上课安排一目了然';
     var badge = document.getElementById('weekBadge');
     var today = WEEKDAYS[todayIdx()] || '今天';
     badge.textContent = '当前第 ' + weekNumber() + ' 周 · ' + today;
