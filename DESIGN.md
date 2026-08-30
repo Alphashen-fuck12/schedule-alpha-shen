@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 10ff82c76385fb81fe56f4a0b12d2d68_c380db92a3c911f192a2525400287e28
+    ReservedCode1: 7svXIEZtynIewupkrNuddAAVeOMAL3SaT3otcdfydronxZrvPIhdNTXP0efHdfaAJEl0PrsO9xyuUwMNJKRftW/IH3tbUA0hpmXeTNbA4LlOLBAObilIXn8tDJnxOVvJK4XBK2G9+8wbO263kqcuhj0LpgxC6Fg1ZZvVLU9S5T6sCVGRc0JOwhhuKRc=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 10ff82c76385fb81fe56f4a0b12d2d68_c380db92a3c911f192a2525400287e28
+    ReservedCode2: 7svXIEZtynIewupkrNuddAAVeOMAL3SaT3otcdfydronxZrvPIhdNTXP0efHdfaAJEl0PrsO9xyuUwMNJKRftW/IH3tbUA0hpmXeTNbA4LlOLBAObilIXn8tDJnxOVvJK4XBK2G9+8wbO263kqcuhj0LpgxC6Fg1ZZvVLU9S5T6sCVGRc0JOwhhuKRc=
+---
+
 # 电子记课表 · 产品设计文档（V0.1 MVP）
 
 ## 一、项目背景
@@ -59,3 +70,4 @@
 ## 七、版本规划
 - MVP（本次）：核心闭环——课表创建/编辑/多条目/换课/备忘录/当前天高亮/持久化/打印。
 - 增强版：多周滚动、主题/背景自定义、自动更新、exe 壳。
+*（内容由AI生成，仅供参考）*

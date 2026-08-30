@@ -1,0 +1,15 @@
+# Rust / Tauri 构建产物
+/src-tauri/target/
+target/
+
+# 系统与编辑器
+Thumbs.db
+Desktop.ini
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# 临时
+temp/
+*_tmp.js

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>课表小组件</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  :root{
+    --font:"Microsoft YaHei",sans-serif;
+    --ink:#2c2f45; --ink-soft:#6b7089;
+    --accent:#6d7cff; --line:rgba(120,120,160,.18);
+    --card:rgba(255,255,255,.72);
+  }
+  body[data-mode="simple"]{
+    --ink:#000; --ink-soft:#333; --accent:#0066cc; --line:#999; --card:#ffffff;
+  }
+  body{
+    font-family:var(--font);
+    color:var(--ink);
+    background:transparent;
+    overflow:hidden;
+    padding:8px;
+    -webkit-user-select:none;user-select:none;
+  }
+  #card{
+    height:100%;
+    border-radius:18px;
+    background:var(--card);
+    backdrop-filter:blur(18px) saturate(1.2);
+    -webkit-backdrop-filter:blur(18px) saturate(1.2);
+    border:1px solid var(--line);
+    box-shadow:0 8px 28px rgba(60,70,140,.16);
+    padding:12px 14px;
+    display:flex;flex-direction:column;
+    gap:8px;
+    overflow:hidden;
+  }
+  body[data-mode="simple"] #card{background:#fff;box-shadow:none}
+  .head{display:flex;align-items:baseline;gap:8px;padding-bottom:8px;border-bottom:1px dashed var(--line);cursor:move}
+  .head .date{font-size:15px;font-weight:700}
+  .head .sub{font-size:11px;color:var(--ink-soft)}
+  .head .clock{margin-left:auto;font-size:14px;font-weight:700;color:var(--accent)}
+  .countdown{font-size:12px;color:var(--ink-soft);text-align:center;padding:4px 0}
+  .countdown b{color:var(--accent)}
+  #lessons{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+  #lessons::-webkit-scrollbar{width:4px}
+  #lessons::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px}
+  .lesson{
+    border:1px solid var(--line);border-radius:12px;padding:7px 10px;
+    background:rgba(255,255,255,.5);
+  }
+  body[data-mode="simple"] .lesson{background:#fff}
+  .lesson .row{display:flex;align-items:center;gap:6px}
+  .lesson .time{font-size:11px;color:var(--ink-soft);min-width:82px}
+  .lesson .course{font-size:14px;font-weight:700;flex:1}
+  .lesson .cls{font-size:11px;color:var(--ink-soft)}
+  .lesson .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .lesson.now{border-color:var(--accent);background:rgba(109,124,255,.10)}
+  .lesson.now .time{color:var(--accent);font-weight:700}
+  .memo-toggle{
+    cursor:pointer;background:none;border:1px dashed var(--line);border-radius:7px;
+    padding:1px 7px;font-size:10px;color:var(--accent);font-family:inherit;flex-shrink:0;
+  }
+  .memo-body{
+    display:none;margin-top:6px;font-size:11px;color:var(--ink-soft);
+    background:rgba(0,0,0,.03);border-radius:7px;padding:6px 8px;line-height:1.5;word-break:break-all;
+  }
+  body[data-mode="simple"] .memo-body{background:#f5f5f5}
+  .no-lesson{text-align:center;color:var(--ink-soft);font-size:13px;padding:22px 0}
+  .no-lesson .big{font-size:22px;margin-bottom:4px}
+  .foot{font-size:10px;color:var(--ink-soft);text-align:center;opacity:.7;padding-top:4px;border-top:1px dashed var(--line)}
+  body.reminding #card{animation:flash 1s ease-in-out infinite}
+  @keyframes flash{0%,100%{box-shadow:0 0 0 2px rgba(239,68,68,.95)}50%{box-shadow:0 0 0 5px rgba(239,68,68,.3)}}
+</style>
+</head>
+<body>
+  <div id="card">
+    <div class="head" data-tauri-drag-region>
+      <span class="date" id="wDate">今日课表</span>
+      <span class="sub" id="wSub">等待数据…</span>
+      <span class="clock" id="wClock">--:--</span>
+    </div>
+    <div class="countdown" id="wCount">——</div>
+    <div id="lessons"></div>
+    <div class="foot" id="wFoot">课表跟随系统时间自动校准</div>
+  </div>
+<script>
+(function(){
+  var STORAGE_KEY = 'elec_schedule_full_v1';
+  var MODE_KEY = 'elec_schedule_mode_v1';
+  var FONTS = ['微软雅黑','宋体','楷体','黑体','等线'];
+  var WEEKDAYS = ['周一','周二','周三','周四','周五','周六','周日'];
+  var state = null;
+  var reminded = {};
+  var els = {
+    date: document.getElementById('wDate'),
+    sub: document.getElementById('wSub'),
+    clock: document.getElementById('wClock'),
+    count: document.getElementById('wCount'),
+    lessons: document.getElementById('lessons'),
+    foot: document.getElementById('wFoot')
+  };
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function load(){
+    try{ var raw = localStorage.getItem(STORAGE_KEY); if(!raw) return null; var o = JSON.parse(raw); return o; }catch(e){ return null; }
+  }
+  function todayIdx(){ return (new Date().getDay()+6)%7; }
+  function isCustom(c, o){ return (o.customCourses||[]).some(function(x){ return x.name===c; }); }
+  function courseColor(c, o){ var x=(o.customCourses||[]).filter(function(z){return z.name===c;})[0]; return x?x.color:''; }
+  function settings(o){
+    var s = o.settings || {};
+    var d = {font:'微软雅黑', remind:false, remindMin:1, sound:true, dndStart:'', dndEnd:'', remindOnce:true, timeHint:''};
+    for(var k in d){ if(s[k]==null) s[k]=d[k]; }
+    return s;
+  }
+  function applyStyle(o){
+    var s = settings(o);
+    var f = FONTS.indexOf(s.font)>=0 ? s.font : '微软雅黑';
+    document.body.style.setProperty('--font', "'"+f+"','Microsoft YaHei',sans-serif");
+    var mode = 'glass';
+    try{ mode = localStorage.getItem(MODE_KEY)==='simple' ? 'simple' : 'glass'; }catch(e){}
+    document.body.setAttribute('data-mode', mode);
+    els.foot.textContent = s.timeHint || '课表跟随系统时间自动校准';
+  }
+  function currentPeriodIdx(o){
+    var now = new Date(), hm = now.getHours()*60+now.getMinutes(), times = o.times||[];
+    for(var p=0;p<times.length;p++){
+      var m=(times[p]||'').match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+      if(m){ var s=parseInt(m[1],10)*60+parseInt(m[2],10), e=parseInt(m[3],10)*60+parseInt(m[4],10); if(hm>=s&&hm<e) return p; }
+    }
+    return -1;
+  }
+  function nextPeriod(o){
+    var now=new Date(), hm=now.getHours()*60+now.getMinutes(), times=o.times||[];
+    for(var p=0;p<times.length;p++){
+      var m=(times[p]||'').match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+      if(m){ var s=parseInt(m[1],10)*60+parseInt(m[2],10); if(hm<s){ var t=new Date(now); t.setHours(parseInt(m[1],10),parseInt(m[2],10),0,0); return {idx:p, ms:t-now, start:m[1]+':'+m[2]}; } }
+    }
+    return null;
+  }
+  function inDnd(s){
+    if(!s.dndStart||!s.dndEnd) return false;
+    var n=new Date(), hm=n.getHours()*60+n.getMinutes();
+    var a=s.dndStart.split(':'), b=s.dndEnd.split(':');
+    var st=parseInt(a[0],10)*60+parseInt(a[1],10), en=parseInt(b[0],10)*60+parseInt(b[1],10);
+    if(st===en) return false;
+    return st<en ? (hm>=st&&hm<=en) : (hm>=st||hm<=en);
+  }
+  function render(){
+    var o = load(); if(!o){ els.lessons.innerHTML = '<div class="no-lesson"><div class="big">📋</div>请先在主程序中导入课表</div>'; return; }
+    state = o; applyStyle(o);
+    var d = new Date();
+    var dIdx = todayIdx();
+    els.date.textContent = (d.getMonth()+1)+'月'+d.getDate()+'日 ' + (WEEKDAYS[dIdx]||'');
+    var s = settings(o);
+    var P = o.periods||8;
+    var html = '', any = false;
+    for(var p=0;p<P;p++){
+      var arr = o.grid[(dIdx)+'-'+p] || [];
+      if(!arr.length) continue;
+      any = true;
+      var isNow = (p===currentPeriodIdx(o));
+      var t = o.times&&o.times[p]?o.times[p]:'';
+      arr.forEach(function(e){
+        var dot = courseColor(e.course,o);
+        html += '<div class="lesson'+(isNow?' now':'')+'">'
+             +   '<div class="row">'
+             +   (dot?'<span class="dot" style="background:'+dot+'"></span>':'')
+             +   '<span class="time">'+esc(t)+'</span>'
+             +   '<span class="course">'+(isCustom(e.course,o)?'<b style="color:#7c3aed">自</b> ':'')+esc(e.course)+'</span>'
+             +   '<span class="cls">'+esc(e.grade)+' '+esc(e.cls)+'班'+(e.room?'·'+esc(e.room):'')+'</span>'
+             +   (e.note?'<button class="memo-toggle">备注</button>':'')
+             +   '</div>'
+             +   (e.note?'<div class="memo-body">📌 '+esc(e.note)+'</div>':'')
+             +   '</div>';
+      });
+    }
+    els.lessons.innerHTML = any ? html : '<div class="no-lesson"><div class="big">🎉</div>今日无课，好好休息～</div>';
+    els.lessons.querySelectorAll('.memo-toggle').forEach(function(b){
+      b.addEventListener('click', function(){
+        var body = this.nextElementSibling;
+        var open = body.style.display!=='none';
+        body.style.display = open?'none':'block';
+        this.textContent = open?'备注':'收起';
+      });
+    });
+    // 倒计时
+    var np = nextPeriod(o);
+    if(np){ var tot=Math.ceil(np.ms/1000), mm=Math.floor(tot/60), ss=tot%60; els.count.textContent = '下一节 第'+(np.idx+1)+'节 '+(np.start)+' · 倒计时 '+mm+':'+('0'+ss).slice(-2); }
+    else els.count.textContent = '今日课程已结束';
+    els.sub.textContent = (state.teacher?'为 '+esc(state.teacher)+' 老师':'')+' · 共 '+(any?els.lessons.querySelectorAll('.lesson').length:0)+' 节';
+  }
+  function tickClock(){
+    var d=new Date();
+    els.clock.textContent = ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+':'+('0'+d.getSeconds()).slice(-2);
+  }
+  // 上课提醒（小组件内）
+  function remindCheck(){
+    if(!state) return;
+    var s = settings(state); if(!s.remind || inDnd(s)) return;
+    var d=new Date(), dIdx=todayIdx(), nowMin=d.getHours()*60+d.getMinutes();
+    (state.times||[]).forEach(function(t,p){
+      var m=(t||'').match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+      if(!m) return;
+      var start=parseInt(m[1],10)*60+parseInt(m[2],10);
+      var lead=Math.max(0,parseInt(s.remindMin,10)||1);
+      var diff=start-nowMin, k=dIdx+'-'+p;
+      if(diff>=0&&diff<=lead&&(s.remindOnce===false||!reminded[k])){
+        reminded[k]=true;
+        document.body.classList.add('reminding');
+        setTimeout(function(){ document.body.classList.remove('reminding'); },15000);
+      }
+      if(diff<0&&reminded[k]) delete reminded[k];
+    });
+  }
+  function sync(){
+    if(window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen){
+      window.__TAURI__.event.listen('schedule:changed', function(){ render(); });
+    }
+  }
+  render(); tickClock(); remindCheck();
+  setInterval(function(){ tickClock(); remindCheck(); render(); }, 1000);
+  sync();
+})();
+</script>
+</body>
+</html>
