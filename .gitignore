@@ -2,6 +2,10 @@
 /src-tauri/target/
 target/
 
+# 构建输出与临时图
+dist/
+assets/.tmp_png/
+
 # 系统与编辑器
 Thumbs.db
 Desktop.ini
