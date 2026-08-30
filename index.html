@@ -126,6 +126,66 @@
   .theme-btn .dot{width:14px;height:14px;border-radius:50%;display:inline-block;border:1px solid rgba(0,0,0,.08)}
   .theme-btn.active{border-color:var(--accent);box-shadow:0 0 0 3px rgba(109,124,255,.25)}
 
+  /* ============ 简洁模式（Excel 表格感，白底黑线） ============ */
+  body[data-mode="simple"]{
+    --bg1:#ffffff; --bg2:#ffffff;
+    --glass:#ffffff; --glass-strong:#ffffff;
+    --line:#9aa0a6; --ink:#1a1a1a; --ink-soft:#444;
+    --accent:#1a1a1a; --accent-2:#333;
+    --today:#e8f0fe; --shadow:none;
+    background:#fff;
+    font-size:17px;
+    padding:18px 22px 40px;
+  }
+  body[data-mode="simple"] #bgLayer{display:none !important}
+  body[data-mode="simple"] .glass,
+  body[data-mode="simple"] .modal{
+    background:#fff !important;
+    backdrop-filter:none !important;
+    -webkit-backdrop-filter:none !important;
+    border:1px solid #555 !important;
+    border-radius:4px;
+    box-shadow:none !important;
+  }
+  body[data-mode="simple"] header{background:#fff !important;border-color:#555}
+  body[data-mode="simple"] header h1{font-size:28px}
+  body[data-mode="simple"] #weekBadge{background:#1a1a1a;box-shadow:none;border-radius:4px}
+  body[data-mode="simple"] .btn{
+    background:#1a1a1a;box-shadow:none;border-radius:4px;font-size:15px;
+  }
+  body[data-mode="simple"] .btn.ghost{background:#fff;color:#1a1a1a;border:1px solid #555}
+  body[data-mode="simple"] .theme-bar .theme-btn{background:#fff;border:1px solid #999;color:#1a1a1a}
+  body[data-mode="simple"] #grid{border-spacing:0;border-collapse:collapse}
+  body[data-mode="simple"] #grid th,
+  body[data-mode="simple"] #grid td{
+    border:1px solid #555;border-radius:0;background:#fff;color:#1a1a1a;
+  }
+  body[data-mode="simple"] #grid th{background:#f1f3f4;font-size:20px}
+  body[data-mode="simple"] #grid td{font-size:17px;min-height:96px}
+  body[data-mode="simple"] #grid td.period-col{background:#f1f3f4;font-weight:700}
+  body[data-mode="simple"] #grid td.period-col small{color:#444}
+  body[data-mode="simple"] #grid td.today{background:#e8f0fe;border-color:#555}
+  body[data-mode="simple"] #grid td:hover{background:#f8f9fa}
+  body[data-mode="simple"] .entry{
+    background:#fff;border:1px solid #888;border-radius:2px;text-align:left;
+  }
+  body[data-mode="simple"] .entry .course{font-size:18px}
+  body[data-mode="simple"] .entry .cls{font-size:15px;color:#333}
+  body[data-mode="simple"] .empty-hint{color:#aaa;font-size:16px}
+  body[data-mode="simple"] select,
+  body[data-mode="simple"] input[type=text],
+  body[data-mode="simple"] input[type=number],
+  body[data-mode="simple"] input[type=date],
+  body[data-mode="simple"] textarea{
+    background:#fff;border:1px solid #888;border-radius:4px;color:#1a1a1a;
+  }
+  body[data-mode="simple"] .modal-backdrop{background:rgba(0,0,0,.35);backdrop-filter:none;-webkit-backdrop-filter:none}
+  body[data-mode="simple"] .close-x{background:#eee;color:#333}
+  body[data-mode="simple"] .hist-item,
+  body[data-mode="simple"] .entry-edit-item{background:#fff;border:1px solid #ccc;border-radius:2px}
+  body[data-mode="simple"] .bless-modal .bless-text{font-size:28px;color:#1a1a1a}
+  body[data-mode="simple"] .bg-panel{border-top-color:#ccc}
+
   /* ============ 主体布局 ============ */
   #appMain{display:flex;gap:24px;align-items:flex-start}
   #gridWrap{flex:1 1 auto;min-width:0;padding:26px 30px}
@@ -227,19 +287,24 @@
     header .actions,#swapPanel,#printBtn,.modal-backdrop,.theme-bar,#bgLayer{display:none !important}
     body{background:#fff !important;padding:0}
     header{box-shadow:none;border:none;padding:0 0 14px}
-    header h1{font-size:22px}
-    #weekBadge{margin-left:0;background:none;color:#333;box-shadow:none;padding:4px 0;font-size:15px}
+    header h1{font-size:24px}
+    #weekBadge{margin-left:0;background:none;color:#333;box-shadow:none;padding:4px 0;font-size:16px}
     #appMain{display:block}
     #gridWrap{box-shadow:none;border:none;border-radius:0;padding:0}
     #grid{border-spacing:0;width:100%}
-    #grid th,#grid td{border:1px solid #999;border-radius:0;background:#fff;color:#000;font-size:13px}
-    #grid td{min-height:44px}
-    #grid td.today{background:#ffe9a8}
-    .entry{background:#fff;border:1px solid #ccc}
-    .entry .course{font-size:14px}
-    .entry .cls{font-size:11px}
+    #grid th,#grid td{border:1px solid #333;border-radius:0;background:#fff;color:#000;font-size:15px}
+    #grid th{font-size:16px}
+    #grid td{min-height:50px}
+    #grid td.today{background:#fff}
+    #grid td.period-col small{font-size:14px}
+    .entry{background:#fff;border:1px solid #666}
+    .entry .course{font-size:15px}
+    .entry .cls{font-size:14px}
     .entry .note-tag{display:none}
   }
+  body[data-mode="simple"] #grid th,
+  body[data-mode="simple"] #grid td{border-color:#000}
+  body[data-mode="simple"] #grid td.today{background:#fff}
 </style>
 </head>
 <body>
@@ -264,6 +329,8 @@
     <button class="btn ghost" id="btnSettings">课表设置</button>
     <button class="btn ghost" id="btnBg">背景</button>
     <button class="btn ghost" id="btnMemo">备忘录</button>
+    <button class="btn ghost" id="btnMode">简洁模式</button>
+    <button class="btn" id="btnExcel">导出Excel</button>
     <button class="btn" id="btnBless">祝福</button>
     <button class="btn" id="printBtn">打印课表</button>
   </div>
@@ -3382,8 +3449,25 @@ var GENERIC_BLESSINGS = [
   }
 
   // ---------- 渲染 ----------
+  var MODE_KEY = 'elec_schedule_mode_v1';
+  function loadMode(){
+    try{ return localStorage.getItem(MODE_KEY)==='simple' ? 'simple' : 'glass'; }
+    catch(e){ return 'glass'; }
+  }
+  function applyMode(){
+    var m = loadMode();
+    document.body.setAttribute('data-mode', m);
+    var btn = document.getElementById('btnMode');
+    if(btn) btn.textContent = (m==='simple') ? '玻璃模式' : '简洁模式';
+  }
+  function toggleMode(){
+    var m = loadMode()==='simple' ? 'glass' : 'simple';
+    try{ localStorage.setItem(MODE_KEY, m); }catch(e){}
+    applyMode();
+  }
   function render(){
     applyTheme();
+    applyMode();
     applyBackground();
     renderHeader();
     renderGrid();
@@ -3575,6 +3659,43 @@ var GENERIC_BLESSINGS = [
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
+  // ---------- 导出 Excel（CSV，UTF-8 带 BOM，Excel/WPS 可打开不乱码） ----------
+  function csvCell(s){
+    s = String(s==null?'':s);
+    if(/[",\r\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+    return s;
+  }
+  function exportCsv(){
+    var P = state.periods, lines = [];
+    lines.push(['周几','节次','时间','课程','年级','班级','门牌号','备注'].map(csvCell).join(','));
+    for(var p=0;p<P;p++){
+      var t = state.times && state.times[p] ? state.times[p] : '';
+      for(var d=0;d<5;d++){
+        var arr = state.grid[key(d,p)] || [];
+        if(!arr.length){
+          lines.push([WEEKDAYS[d], '第'+(p+1)+'节', t, '', '', '', '', ''].map(csvCell).join(','));
+        } else {
+          arr.forEach(function(e){
+            lines.push([WEEKDAYS[d], '第'+(p+1)+'节', t,
+              e.course||'', e.grade||'', (e.cls? e.cls+'班':''), e.room||'', e.note||''
+            ].map(csvCell).join(','));
+          });
+        }
+      }
+    }
+    var csv = '\ufeff' + lines.join('\r\n'); // BOM 确保 Excel 识别 UTF-8
+    var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    var d = new Date();
+    var ds = d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+    a.download = '课表_' + (state.teacher||'课表') + '_' + ds + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
   function importBackup(file){
     if(!file) return;
     var reader = new FileReader();
@@ -3757,6 +3878,8 @@ var GENERIC_BLESSINGS = [
     document.getElementById('inpMemo').value = state.memo || '';
     showModal('memoBackdrop');
   });
+  document.getElementById('btnMode').addEventListener('click', toggleMode);
+  document.getElementById('btnExcel').addEventListener('click', exportCsv);
   document.getElementById('inpMemo').addEventListener('input', function(){
     state.memo = this.value; save();
   });
