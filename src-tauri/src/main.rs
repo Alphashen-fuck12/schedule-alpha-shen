@@ -23,10 +23,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 // 远程清单地址：可通过环境变量 SCHEDULE_UPDATE_URL 覆盖（便于测试/配置真实仓库）
 const UPDATE_URL_KEY: &str = "SCHEDULE_UPDATE_URL";
 // 占位符地址：发布前必须替换为真实 GitHub 仓库的 version.json 裸链接
-//（格式如 https://raw.githubusercontent.com/<owner>/<repo>/main/version.json），
+//（格式如 https://raw.githubusercontent.com/<owner>/<repo>/master/version.json），
 // 否则自动更新将无法拉取到清单。当前保持占位符值，仅作演示。
 const DEFAULT_UPDATE_URL: &str =
-    "https://raw.githubusercontent.com/YOUR_REPO/schedule/main/version.json";
+    "https://raw.githubusercontent.com/Alphashen-fuck12/schedule-alpha-shen/master/version.json";
 // 更新暂存目录：%APPDATA%\schedule\update\
 const OLD_FILE_MAX_AGE_DAYS: u64 = 60; // 旧版备份/暂存超期自动清理阈值（天）
 
