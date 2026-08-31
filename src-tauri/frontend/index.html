@@ -418,6 +418,7 @@
       <div class="more-menu" id="moreMenu">
         <button data-act="manage">课程管理</button>
         <button data-act="manageGrade">年级管理</button>
+        <button data-act="manageClass">班级管理</button>
         <button data-act="bg">背景设置</button>
         <button data-act="memo">备忘录</button>
         <button data-act="print">打印课表</button>
@@ -495,8 +496,8 @@
     <div class="row">
       <div class="field"><label>第 1 周周一日期</label><input type="date" id="inpDate"></div>
       <div class="field"><label>每天节数</label><input type="number" id="inpPeriods" min="1" max="12" value="8"></div>
-      <div class="field"><label>班级数</label><input type="number" id="inpClasses" min="1" max="12" value="3"></div>
-      <div class="field"><label>任教年级</label><select id="inpGrade"></select></div>
+      <div class="field"><label>班级数（自动生成 01~0N 数字班，可自定义班级名）</label><input type="number" id="inpClasses" min="1" max="12" value="3"></div>
+      <div class="field"><label>任教年级（可输入自定义）</label><input type="text" id="inpGrade" list="gradeList" placeholder="选择或输入自定义年级"></div>
     </div>
     <div class="field full">
       <label>节次时间（每行一节，格式 开始-结束，行数不够的节次时间留空）</label>
@@ -548,8 +549,14 @@
         <input type="text" id="addCourse" list="courseList" placeholder="选择或输入自定义课程">
         <datalist id="courseList"></datalist>
       </div>
-      <div class="field"><label>年级</label><select id="addGrade"></select></div>
-      <div class="field"><label>班级</label><select id="addCls"></select></div>
+      <div class="field"><label>年级（可输入自定义）</label>
+        <input type="text" id="addGrade" list="gradeList" placeholder="选择或输入自定义年级">
+        <datalist id="gradeList"></datalist>
+      </div>
+      <div class="field"><label>班级（可输入自定义）</label>
+        <input type="text" id="addCls" list="classList" placeholder="选择或输入自定义班级">
+        <datalist id="classList"></datalist>
+      </div>
       <div class="field"><label>门牌号</label>
         <input type="text" id="addRoom" list="roomList" placeholder="选择或输入">
         <datalist id="roomList"></datalist>
@@ -561,6 +568,9 @@
       </div>
       <div class="field"><label>年级管理</label>
         <button class="btn ghost small" id="btnManageGrades" type="button">管理年级…</button>
+      </div>
+      <div class="field"><label>班级管理</label>
+        <button class="btn ghost small" id="btnManageClasses" type="button">管理班级…</button>
       </div>
     </div>
     <div class="field" style="margin-top:6px"><label>备注（悬停单元格可见）</label><input type="text" id="addNote" placeholder="如：带实验器材"></div>
@@ -589,9 +599,30 @@
     <button class="close-x" data-close="gradeBackdrop">×</button>
     <h3>年级管理</h3>
     <div class="field"><label>预设：初一 / 初二 / 初三 / 高一 / 高二 / 高三；自定义年级带“自”标记，可置顶或删除（删除后课表数据不受影响）</label></div>
+    <div class="row" style="margin-top:6px">
+      <div class="field" style="flex:1"><input type="text" id="addCustomGrade" list="gradeList" placeholder="输入自定义年级，如：预备班"></div>
+      <button class="btn" id="btnAddCustomGrade" type="button" style="align-self:flex-end">添加</button>
+    </div>
     <div id="gradeManageList"></div>
     <div style="text-align:right;margin-top:10px">
       <button class="btn" data-close="gradeBackdrop">完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- 班级管理 弹窗 -->
+<div class="modal-backdrop" id="classBackdrop">
+  <div class="modal glass" style="position:relative">
+    <button class="close-x" data-close="classBackdrop">×</button>
+    <h3>班级管理</h3>
+    <div class="field"><label>数字班按“班级数”自动生成（如 01 班 / 02 班）；自定义班级带“自”标记，可置顶或删除（删除后课表数据不受影响）</label></div>
+    <div class="row" style="margin-top:6px">
+      <div class="field" style="flex:1"><input type="text" id="addCustomClass" list="classList" placeholder="输入自定义班级，如：实验班"></div>
+      <button class="btn" id="btnAddCustomClass" type="button" style="align-self:flex-end">添加</button>
+    </div>
+    <div id="classManageList"></div>
+    <div style="text-align:right;margin-top:10px">
+      <button class="btn" data-close="classBackdrop">完成</button>
     </div>
   </div>
 </div>
@@ -3669,8 +3700,8 @@ var GENERIC_BLESSINGS = [
       return '<option value="'+esc(v)+'">';
     }).join('');
   }
-  // ---------- 可自定义列表（学科 / 年级 共用同一套通用函数） ----------
-  // key: 'customCourses' | 'customGrades'；preset: 预设数组（COURSES / GRADES）
+  // ---------- 可自定义列表（学科 / 年级 / 班级 共用同一套通用函数） ----------
+  // key: 'customCourses' | 'customGrades' | 'customClasses'；preset: 预设数组（COURSES / GRADES / 数字班）
   function listItems(key){ if(!state[key]) state[key]=[]; return state[key]; }
   // 合并预设 + 自定义项的全名列表
   function allNamesOf(key, preset){
@@ -3709,7 +3740,8 @@ var GENERIC_BLESSINGS = [
       return (b.pinned?1:0) - (a.pinned?1:0);
     });
     if(!items.length){
-      box.innerHTML = '<div class="hist-empty">还没有自定义项，添加自定义'+ (preset===GRADES?'年级':'课程') +'后会自动记录到这里。</div>';
+      var label = key==='customGrades' ? '年级' : (key==='customClasses' ? '班级' : '课程');
+      box.innerHTML = '<div class="hist-empty">还没有自定义项，添加自定义'+ label +'后会自动记录到这里。</div>';
       return;
     }
     box.innerHTML = items.map(function(c){
@@ -3755,8 +3787,18 @@ var GENERIC_BLESSINGS = [
   function gradeColor(name){ return colorOf('customGrades', name); }
   function recordCustomGrade(name){ recordCustomOf('customGrades', GRADES, name); }
   function fillGradeInput(input){ fillInputOf('customGrades', GRADES, input, 'gradeList'); }
-  function renderGradeManage(){ renderManageOf('customGrades', GRADES, 'gradeManageList', function(){ fillSel(document.getElementById('addGrade'), allGradeNames(), state.grade||GRADES[0]); }); }
-  function openGradeManage(){ openManageOf('customGrades', GRADES, 'gradeManageList', 'gradeBackdrop', function(){ fillSel(document.getElementById('addGrade'), allGradeNames(), state.grade||GRADES[0]); }); }
+  function renderGradeManage(){ renderManageOf('customGrades', GRADES, 'gradeManageList', function(){ fillGradeInput(document.getElementById('addGrade')); }); }
+  function openGradeManage(){ openManageOf('customGrades', GRADES, 'gradeManageList', 'gradeBackdrop', function(){ fillGradeInput(document.getElementById('addGrade')); }); }
+  // ---- 班级封装（复用同一套通用函数；预设为数字班 01~0N） ----
+  function allClassNames(){ return allNamesOf('customClasses', clsOptions()); }
+  function isCustomClass(name){ return isCustomOf('customClasses', name); }
+  function classColor(name){ return colorOf('customClasses', name); }
+  function recordCustomClass(name){ recordCustomOf('customClasses', clsOptions(), name); }
+  function fillClassInput(input){ fillInputOf('customClasses', clsOptions(), input, 'classList'); }
+  function renderClassManage(){ renderManageOf('customClasses', clsOptions(), 'classManageList', function(){ fillClassInput(document.getElementById('addCls')); }); }
+  function openClassManage(){ openManageOf('customClasses', clsOptions(), 'classManageList', 'classBackdrop', function(){ fillClassInput(document.getElementById('addCls')); }); }
+  // 班级显示名：自定义名若已含“班”字则不重复拼接
+  function clsLabel(c){ c = String(c||''); return /班$/.test(c) ? c : (c+'班'); }
   function pad(n){ return ('0'+n).slice(-2); }
   function dateToStr(d){
     return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
@@ -3937,7 +3979,7 @@ var GENERIC_BLESSINGS = [
             rows += '<div class="entry">'
                  +   (dot ? '<span class="course-dot" style="background:'+dot+'"></span>' : '')
                  +   '<span class="course">'+(isCustomCourse(e.course)?'<b class="custom-mark">自</b>':'')+esc(e.course)+'</span>'
-                 +   '<span class="cls">'+esc(e.grade)+' '+esc(e.cls)+'班'+(e.room?' · '+esc(e.room):'')+'</span>'
+                 +   '<span class="cls">'+esc(e.grade)+' '+esc(clsLabel(e.cls))+(e.room?' · '+esc(e.room):'')+'</span>'
                  +   (e.note ? '<button class="note-toggle" data-note="'+esc(e.note)+'">📌 备注</button>' : '')
                  +   (e.note ? '<div class="note-body" style="display:none">'+esc(e.note)+'</div>' : '')
                  + '</div>';
@@ -3996,7 +4038,8 @@ var GENERIC_BLESSINGS = [
     document.getElementById('inpDate').value = state.week1 || dateToStr(mondayOf(new Date()));
     document.getElementById('inpPeriods').value = state.periods || 8;
     document.getElementById('inpClasses').value = state.classes || 3;
-    fillSel(document.getElementById('inpGrade'), allGradeNames(), state.grade || allGradeNames()[0] || '');
+    fillGradeInput(document.getElementById('inpGrade'));
+    if(!document.getElementById('inpGrade').value) document.getElementById('inpGrade').value = state.grade || allGradeNames()[0] || '';
     var times = (state.times && state.times.length) ? state.times.join('\n') : defaultTimes();
     document.getElementById('inpTimes').value = times;
     document.getElementById('inpRooms').value = (state.rooms||[]).join('\n');
@@ -4031,9 +4074,11 @@ var GENERIC_BLESSINGS = [
       memo: (state && state.memo) || '',
       customCourses: (state && state.customCourses) || [],
       customGrades: (state && state.customGrades) || [],
+      customClasses: (state && state.customClasses) || [],
       weekOverrides: (state && state.weekOverrides) || {},
       settings: (state && state.settings) || {}
     };
+    if(state.grade) recordCustomGrade(state.grade);
     save();
     hideModal('setupBackdrop');
     render();
@@ -4105,7 +4150,7 @@ var GENERIC_BLESSINGS = [
         } else {
           arr.forEach(function(e){
             lines.push([WEEKDAYS[d], '第'+(p+1)+'节', t,
-              e.course||'', e.grade||'', (e.cls? e.cls+'班':''), e.room||'', e.note||''
+              e.course||'', e.grade||'', (e.cls? clsLabel(e.cls):''), e.room||'', e.note||''
             ].map(csvCell).join(','));
           });
         }
@@ -4138,6 +4183,7 @@ var GENERIC_BLESSINGS = [
         if(obj.bgBlur == null) obj.bgBlur = 8;
         if(!obj.customCourses) obj.customCourses = [];
         if(!obj.customGrades) obj.customGrades = [];
+        if(!obj.customClasses) obj.customClasses = [];
         if(!obj.weekOverrides) obj.weekOverrides = {};
         if(!obj.settings) obj.settings = {};
         state = obj;
@@ -4155,8 +4201,10 @@ var GENERIC_BLESSINGS = [
     cellKey = key(d,p);
     document.getElementById('cellTitle').textContent = WEEKDAYS[d] + ' · 第 '+(p+1)+' 节';
     fillCourseInput(document.getElementById('addCourse'));
-    fillSel(document.getElementById('addGrade'), allGradeNames(), state.grade || allGradeNames()[0] || '');
-    fillSel(document.getElementById('addCls'), clsOptions(), clsOptions()[0]);
+    fillGradeInput(document.getElementById('addGrade'));
+    fillClassInput(document.getElementById('addCls'));
+    if(!document.getElementById('addGrade').value) document.getElementById('addGrade').value = state.grade || allGradeNames()[0] || '';
+    if(!document.getElementById('addCls').value) document.getElementById('addCls').value = state.classes>0 ? clsOptions()[0] : (allClassNames()[0]||'');
     fillDatalist(document.getElementById('roomList'), roomOptions());
     document.getElementById('addRoom').value = '';
     document.getElementById('addNote').value = '';
@@ -4173,7 +4221,7 @@ var GENERIC_BLESSINGS = [
     }
     box.innerHTML = arr.map(function(e,i){
       return '<div class="entry-edit-item">'
-           +   '<div class="info"><strong>'+esc(e.course)+'</strong> · '+esc(e.grade)+' '+esc(e.cls)+'班'
+           +   '<div class="info"><strong>'+esc(e.course)+'</strong> · '+esc(e.grade)+' '+esc(clsLabel(e.cls))
            +   (e.room ? ' · '+esc(e.room) : '')
            +   (e.note ? '<br><small>📌 '+esc(e.note)+'</small>' : '')
            +   '</div>'
@@ -4202,6 +4250,7 @@ var GENERIC_BLESSINGS = [
     };
     if(e.course) recordCustomCourse(e.course);
     if(e.grade) recordCustomGrade(e.grade);
+    if(e.cls) recordCustomClass(e.cls);
     var kk = cellKey.split('-');
     var d = parseInt(kk[0],10), p = parseInt(kk[1],10);
     cellFor(d,p,viewWeek).push(e);
@@ -4536,7 +4585,7 @@ var GENERIC_BLESSINGS = [
     viewWeek = loadViewWeek();
     initUpdate();
     if(!state){
-      state = { grid:{}, memo:'', teacher:'', week1:'', periods:8, classes:3, grade:GRADES[0], times:[], rooms:[], theme:'dawn', bg:null, bgBlur:8, customCourses:[], customGrades:[], weekOverrides:{}, settings:{} };
+      state = { grid:{}, memo:'', teacher:'', week1:'', periods:8, classes:3, grade:GRADES[0], times:[], rooms:[], theme:'dawn', bg:null, bgBlur:8, customCourses:[], customGrades:[], customClasses:[], weekOverrides:{}, settings:{} };
       render();
       openSetup(true);
       return;
@@ -4584,6 +4633,7 @@ var GENERIC_BLESSINGS = [
       else if(act==='print') window.print();
       else if(act==='manage') openCourseManage();
       else if(act==='manageGrade') openGradeManage();
+      else if(act==='manageClass') openClassManage();
       else if(act==='help') openHelp();
     });
   });
@@ -4616,6 +4666,21 @@ var GENERIC_BLESSINGS = [
   });
   document.getElementById('btnManageCourses').addEventListener('click', openCourseManage);
   document.getElementById('btnManageGrades').addEventListener('click', openGradeManage);
+  document.getElementById('btnManageClasses').addEventListener('click', openClassManage);
+  document.getElementById('btnAddCustomGrade').addEventListener('click', function(){
+    var v = document.getElementById('addCustomGrade').value.trim();
+    if(!v){ alert('请输入年级名'); return; }
+    recordCustomGrade(v);
+    document.getElementById('addCustomGrade').value = '';
+    renderGradeManage();
+  });
+  document.getElementById('btnAddCustomClass').addEventListener('click', function(){
+    var v = document.getElementById('addCustomClass').value.trim();
+    if(!v){ alert('请输入班级名'); return; }
+    recordCustomClass(v);
+    document.getElementById('addCustomClass').value = '';
+    renderClassManage();
+  });
   document.getElementById('btnUpdateNow').addEventListener('click', applyUpdateNow);
   document.getElementById('btnUpdateLater').addEventListener('click', function(){
     document.getElementById('updateBar').style.display = 'none';

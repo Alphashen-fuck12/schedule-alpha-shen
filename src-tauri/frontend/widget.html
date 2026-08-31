@@ -109,6 +109,7 @@
   function todayIdx(){ return (new Date().getDay()+6)%7; }
   function isCustom(c, o){ return (o.customCourses||[]).some(function(x){ return x.name===c; }); }
   function courseColor(c, o){ var x=(o.customCourses||[]).filter(function(z){return z.name===c;})[0]; return x?x.color:''; }
+  function clsLabel(c){ c = String(c==null?'':c); return /班$/.test(c) ? c : (c+'班'); }
   function settings(o){
     var s = o.settings || {};
     var d = {font:'微软雅黑', remind:false, remindMin:1, sound:true, dndStart:'', dndEnd:'', remindOnce:true, timeHint:''};
@@ -170,7 +171,7 @@
              +   (dot?'<span class="dot" style="background:'+dot+'"></span>':'')
              +   '<span class="time">'+esc(t)+'</span>'
              +   '<span class="course">'+(isCustom(e.course,o)?'<b style="color:#7c3aed">自</b> ':'')+esc(e.course)+'</span>'
-             +   '<span class="cls">'+esc(e.grade)+' '+esc(e.cls)+'班'+(e.room?'·'+esc(e.room):'')+'</span>'
+             +   '<span class="cls">'+esc(e.grade)+' '+esc(clsLabel(e.cls))+(e.room?'·'+esc(e.room):'')+'</span>'
              +   (e.note?'<button class="memo-toggle">备注</button>':'')
              +   '</div>'
              +   (e.note?'<div class="memo-body">📌 '+esc(e.note)+'</div>':'')
