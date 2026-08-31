@@ -366,15 +366,37 @@
   body[data-mode="simple"] #grid th,
   body[data-mode="simple"] #grid td{border-color:#000}
   body[data-mode="simple"] #grid td.today{background:#fff}
+
+  /* 版本标签 */
+  .ver-tag{font-size:13px;font-weight:400;color:var(--ink-soft);margin-left:6px;vertical-align:middle}
+  /* 更新提示条 */
+  .update-bar{position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#2f6bff,#7a5cff);color:#fff;padding:0;box-shadow:0 4px 16px rgba(0,0,0,.25);font-size:14px}
+  .update-bar-inner{display:flex;align-items:center;justify-content:center;gap:16px;padding:10px 20px;max-width:1100px;margin:0 auto;flex-wrap:wrap}
+  .update-bar .update-actions{display:flex;gap:8px}
+  .update-bar .btn{color:#fff;border-color:rgba(255,255,255,.6);background:transparent}
+  .update-bar .btn:hover{background:rgba(255,255,255,.15)}
+  .update-bar #btnUpdateNow{background:#fff;color:#2f6bff;border-color:#fff;font-weight:600}
+  .update-bar #btnUpdateNow:hover{background:#f0f3ff}
 </style>
 </head>
 <body>
 
 <div id="bgLayer"></div>
 
+<!-- 发现新版本 提示条（独立于设置面板，启动时检测） -->
+<div id="updateBar" class="update-bar" style="display:none">
+  <div class="update-bar-inner">
+    <span id="updateText">发现新版本</span>
+    <span class="update-actions">
+      <button class="btn small" id="btnUpdateNow">立即更新</button>
+      <button class="btn ghost small" id="btnUpdateLater">稍后</button>
+    </span>
+  </div>
+</div>
+
 <header class="glass">
   <div>
-    <h1>电子记课表</h1>
+    <h1>电子记课表 <span class="ver-tag" id="appVersion"></span></h1>
     <div class="sub" id="headerSub">每日祝福 · 让上课安排一目了然</div>
     <div class="theme-bar">
       <span class="theme-label">主题：</span>
@@ -395,6 +417,7 @@
       <button class="btn" id="btnMore">更多 ▾</button>
       <div class="more-menu" id="moreMenu">
         <button data-act="manage">课程管理</button>
+        <button data-act="manageGrade">年级管理</button>
         <button data-act="bg">背景设置</button>
         <button data-act="memo">备忘录</button>
         <button data-act="print">打印课表</button>
@@ -536,6 +559,9 @@
       <div class="field"><label>课程管理</label>
         <button class="btn ghost small" id="btnManageCourses" type="button">管理常用课程…</button>
       </div>
+      <div class="field"><label>年级管理</label>
+        <button class="btn ghost small" id="btnManageGrades" type="button">管理年级…</button>
+      </div>
     </div>
     <div class="field" style="margin-top:6px"><label>备注（悬停单元格可见）</label><input type="text" id="addNote" placeholder="如：带实验器材"></div>
     <div style="text-align:right;margin-top:10px">
@@ -553,6 +579,19 @@
     <div id="courseManageList"></div>
     <div style="text-align:right;margin-top:10px">
       <button class="btn" data-close="courseBackdrop">完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- 年级管理 弹窗 -->
+<div class="modal-backdrop" id="gradeBackdrop">
+  <div class="modal glass" style="position:relative">
+    <button class="close-x" data-close="gradeBackdrop">×</button>
+    <h3>年级管理</h3>
+    <div class="field"><label>预设：初一 / 初二 / 初三 / 高一 / 高二 / 高三；自定义年级带“自”标记，可置顶或删除（删除后课表数据不受影响）</label></div>
+    <div id="gradeManageList"></div>
+    <div style="text-align:right;margin-top:10px">
+      <button class="btn" data-close="gradeBackdrop">完成</button>
     </div>
   </div>
 </div>
@@ -3420,7 +3459,7 @@ var GENERIC_BLESSINGS = [
   'use strict';
   var STORAGE_KEY = 'elec_schedule_full_v1';
   var COURSES = ['语文','数学','英语','物理','化学','生物','道法','历史','地理','体育','音乐','美术','信息技术','自习','班会'];
-  var GRADES  = ['六年级','七年级','八年级','九年级'];
+  var GRADES  = ['初一','初二','初三','高一','高二','高三'];
   var WEEKDAYS = ['周一','周二','周三','周四','周五'];
   var THEMES = ['dawn','warm','forest','dusk','blank'];
   var FONTS = ['微软雅黑','宋体','楷体','黑体','等线'];
@@ -3535,6 +3574,7 @@ var GENERIC_BLESSINGS = [
       if(!obj.rooms) obj.rooms = [];
       if(obj.bgBlur == null) obj.bgBlur = 8;
       if(!obj.customCourses) obj.customCourses = [];
+      if(!obj.customGrades) obj.customGrades = [];
       if(!obj.weekOverrides) obj.weekOverrides = {};
       if(!obj.settings) obj.settings = {};
       return obj;
@@ -3628,50 +3668,53 @@ var GENERIC_BLESSINGS = [
       return '<option value="'+esc(v)+'">';
     }).join('');
   }
-  // ---------- 自定义课程 ----------
-  function allCourseNames(){
-    var customs = (state.customCourses||[]).slice();
+  // ---------- 可自定义列表（学科 / 年级 共用同一套通用函数） ----------
+  // key: 'customCourses' | 'customGrades'；preset: 预设数组（COURSES / GRADES）
+  function listItems(key){ if(!state[key]) state[key]=[]; return state[key]; }
+  // 合并预设 + 自定义项的全名列表
+  function allNamesOf(key, preset){
+    var customs = listItems(key).slice();
     var names = [];
     customs.forEach(function(c){ if(c.name && names.indexOf(c.name)<0) names.push(c.name); });
-    COURSES.forEach(function(c){ if(names.indexOf(c)<0) names.push(c); });
+    preset.forEach(function(c){ if(names.indexOf(c)<0) names.push(c); });
     return names;
   }
-  function isCustomCourse(name){
-    return (state.customCourses||[]).some(function(c){ return c.name===name; });
+  function isCustomOf(key, name){
+    return listItems(key).some(function(c){ return c.name===name; });
   }
-  function courseColor(name){
-    var c = (state.customCourses||[]).filter(function(x){ return x.name===name; })[0];
+  function colorOf(key, name){
+    var c = listItems(key).filter(function(x){ return x.name===name; })[0];
     return c ? c.color : '';
   }
-  function recordCustomCourse(name){
+  function recordCustomOf(key, preset, name){
     name = String(name||'').trim();
     if(!name) return;
-    if(COURSES.indexOf(name)>=0) return; // 预设课程不记录
-    if(isCustomCourse(name)) return;
-    if(!state.customCourses) state.customCourses = [];
-    var used = state.customCourses.map(function(c){ return c.color; });
+    if(preset.indexOf(name)>=0) return; // 预设项不记录
+    if(isCustomOf(key, name)) return;
+    if(!state[key]) state[key] = [];
+    var used = state[key].map(function(c){ return c.color; });
     var color = CUSTOM_PALETTE.filter(function(p){ return used.indexOf(p)<0; })[0] || CUSTOM_PALETTE[Math.floor(Math.random()*CUSTOM_PALETTE.length)];
-    state.customCourses.unshift({ name:name, color:color, pinned:false });
+    state[key].unshift({ name:name, color:color, pinned:false });
     save();
   }
-  function fillCourseInput(input){
-    var dl = document.getElementById('courseList');
-    fillDatalist(dl, allCourseNames());
-    if(input && !input.value) input.value = allCourseNames()[0] || '';
+  function fillInputOf(key, preset, input, datalistId){
+    var dl = document.getElementById(datalistId);
+    fillDatalist(dl, allNamesOf(key, preset));
+    if(input && !input.value) input.value = allNamesOf(key, preset)[0] || '';
   }
-  function renderCourseManage(){
-    var box = document.getElementById('courseManageList');
-    var customs = (state.customCourses||[]).slice().sort(function(a,b){
+  function renderManageOf(key, preset, boxId, refillFn){
+    var box = document.getElementById(boxId);
+    var items = listItems(key).slice().sort(function(a,b){
       return (b.pinned?1:0) - (a.pinned?1:0);
     });
-    if(!customs.length){
-      box.innerHTML = '<div class="hist-empty">还没有自定义课程，在格子中添加自定义课程后会自动记录。</div>';
+    if(!items.length){
+      box.innerHTML = '<div class="hist-empty">还没有自定义项，添加自定义'+ (preset===GRADES?'年级':'课程') +'后会自动记录到这里。</div>';
       return;
     }
-    box.innerHTML = customs.map(function(c){
+    box.innerHTML = items.map(function(c){
       var dot = '<span class="course-dot" style="background:'+c.color+'"></span>';
       return '<div class="entry-edit-item">'
-           + '<div class="info">'+dot+'<strong>'+esc(c.name)+'</strong>'+(c.pinned?'<small> · 已置顶</small>':'')+'</div>'
+           + '<div class="info">'+dot+'<strong>'+esc(c.name)+'</strong><small> · 自</small>'+(c.pinned?'<small> · 已置顶</small>':'')+'</div>'
            + '<div style="display:flex;gap:6px">'
            + '<button class="btn ghost small" data-pin="'+esc(c.name)+'">'+(c.pinned?'取消置顶':'置顶')+'</button>'
            + '<button class="del-btn" data-del="'+esc(c.name)+'">删除</button>'
@@ -3679,22 +3722,40 @@ var GENERIC_BLESSINGS = [
     }).join('');
     box.querySelectorAll('[data-pin]').forEach(function(b){
       b.addEventListener('click', function(){
-        var c = (state.customCourses||[]).filter(function(x){ return x.name===this.dataset.pin; })[0];
+        var c = listItems(key).filter(function(x){ return x.name===this.dataset.pin; })[0];
         if(c) c.pinned = !c.pinned;
-        save(); renderCourseManage(); fillCourseInput(document.getElementById('addCourse'));
+        save(); renderManageOf(key, preset, boxId, refillFn);
+        if(refillFn) refillFn();
       });
     });
     box.querySelectorAll('[data-del]').forEach(function(b){
       b.addEventListener('click', function(){
-        state.customCourses = (state.customCourses||[]).filter(function(x){ return x.name!==this.dataset.del; });
-        save(); renderCourseManage(); fillCourseInput(document.getElementById('addCourse'));
+        state[key] = listItems(key).filter(function(x){ return x.name!==this.dataset.del; });
+        save(); renderManageOf(key, preset, boxId, refillFn);
+        if(refillFn) refillFn();
       });
     });
   }
-  function openCourseManage(){
-    renderCourseManage();
-    showModal('courseBackdrop');
+  function openManageOf(key, preset, boxId, backdropId, refillFn){
+    renderManageOf(key, preset, boxId, refillFn);
+    showModal(backdropId);
   }
+  // ---- 学科（课程）封装 ----
+  function allCourseNames(){ return allNamesOf('customCourses', COURSES); }
+  function isCustomCourse(name){ return isCustomOf('customCourses', name); }
+  function courseColor(name){ return colorOf('customCourses', name); }
+  function recordCustomCourse(name){ recordCustomOf('customCourses', COURSES, name); }
+  function fillCourseInput(input){ fillInputOf('customCourses', COURSES, input, 'courseList'); }
+  function renderCourseManage(){ renderManageOf('customCourses', COURSES, 'courseManageList', function(){ fillCourseInput(document.getElementById('addCourse')); }); }
+  function openCourseManage(){ openManageOf('customCourses', COURSES, 'courseManageList', 'courseBackdrop', function(){ fillCourseInput(document.getElementById('addCourse')); }); }
+  // ---- 年级封装（复用同一套通用函数） ----
+  function allGradeNames(){ return allNamesOf('customGrades', GRADES); }
+  function isCustomGrade(name){ return isCustomOf('customGrades', name); }
+  function gradeColor(name){ return colorOf('customGrades', name); }
+  function recordCustomGrade(name){ recordCustomOf('customGrades', GRADES, name); }
+  function fillGradeInput(input){ fillInputOf('customGrades', GRADES, input, 'gradeList'); }
+  function renderGradeManage(){ renderManageOf('customGrades', GRADES, 'gradeManageList', function(){ fillSel(document.getElementById('addGrade'), allGradeNames(), state.grade||GRADES[0]); }); }
+  function openGradeManage(){ openManageOf('customGrades', GRADES, 'gradeManageList', 'gradeBackdrop', function(){ fillSel(document.getElementById('addGrade'), allGradeNames(), state.grade||GRADES[0]); }); }
   function pad(n){ return ('0'+n).slice(-2); }
   function dateToStr(d){
     return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
@@ -3934,7 +3995,7 @@ var GENERIC_BLESSINGS = [
     document.getElementById('inpDate').value = state.week1 || dateToStr(mondayOf(new Date()));
     document.getElementById('inpPeriods').value = state.periods || 8;
     document.getElementById('inpClasses').value = state.classes || 3;
-    fillSel(document.getElementById('inpGrade'), GRADES, state.grade || GRADES[0]);
+    fillSel(document.getElementById('inpGrade'), allGradeNames(), state.grade || allGradeNames()[0] || '');
     var times = (state.times && state.times.length) ? state.times.join('\n') : defaultTimes();
     document.getElementById('inpTimes').value = times;
     document.getElementById('inpRooms').value = (state.rooms||[]).join('\n');
@@ -3968,6 +4029,7 @@ var GENERIC_BLESSINGS = [
       grid: (state && state.grid) || {},
       memo: (state && state.memo) || '',
       customCourses: (state && state.customCourses) || [],
+      customGrades: (state && state.customGrades) || [],
       weekOverrides: (state && state.weekOverrides) || {},
       settings: (state && state.settings) || {}
     };
@@ -4074,6 +4136,7 @@ var GENERIC_BLESSINGS = [
         if(!obj.rooms) obj.rooms = [];
         if(obj.bgBlur == null) obj.bgBlur = 8;
         if(!obj.customCourses) obj.customCourses = [];
+        if(!obj.customGrades) obj.customGrades = [];
         if(!obj.weekOverrides) obj.weekOverrides = {};
         if(!obj.settings) obj.settings = {};
         state = obj;
@@ -4091,7 +4154,7 @@ var GENERIC_BLESSINGS = [
     cellKey = key(d,p);
     document.getElementById('cellTitle').textContent = WEEKDAYS[d] + ' · 第 '+(p+1)+' 节';
     fillCourseInput(document.getElementById('addCourse'));
-    fillSel(document.getElementById('addGrade'), GRADES, state.grade || GRADES[0]);
+    fillSel(document.getElementById('addGrade'), allGradeNames(), state.grade || allGradeNames()[0] || '');
     fillSel(document.getElementById('addCls'), clsOptions(), clsOptions()[0]);
     fillDatalist(document.getElementById('roomList'), roomOptions());
     document.getElementById('addRoom').value = '';
@@ -4137,6 +4200,7 @@ var GENERIC_BLESSINGS = [
       note: document.getElementById('addNote').value.trim()
     };
     if(e.course) recordCustomCourse(e.course);
+    if(e.grade) recordCustomGrade(e.grade);
     var kk = cellKey.split('-');
     var d = parseInt(kk[0],10), p = parseInt(kk[1],10);
     cellFor(d,p,viewWeek).push(e);
@@ -4430,11 +4494,37 @@ var GENERIC_BLESSINGS = [
     alert(tips.join('\n\n'));
   }
 
+  // ---------- 自动更新（前端） ----------
+  function hasTauri(){
+    return !!(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke);
+  }
+  function showVersion(v){
+    var el = document.getElementById('appVersion');
+    if(el && v) el.textContent = 'v' + v;
+  }
+  // 启动时：显示当前版本 + 检测已下载的新版本（二次登录提示：本次启动不打断，仅当暂存了新 exe 才提示）
+  function initUpdate(){
+    if(!hasTauri()) return;
+    window.__TAURI__.core.invoke('get_version').then(showVersion).catch(function(){});
+    window.__TAURI__.core.invoke('check_update').then(function(r){
+      if(r && r.has_new && r.downloaded){
+        document.getElementById('updateText').textContent = '发现新版本 v' + (r.new_version||'') + '，是否立即更新？';
+        document.getElementById('updateBar').style.display = 'block';
+      }
+    }).catch(function(){});
+  }
+  function applyUpdateNow(){
+    document.getElementById('updateBar').style.display = 'none';
+    if(!hasTauri()) return;
+    window.__TAURI__.core.invoke('apply_update').catch(function(){});
+  }
+
   // ---------- 初始化 ----------
   function init(){
     viewWeek = loadViewWeek();
+    initUpdate();
     if(!state){
-      state = { grid:{}, memo:'', teacher:'', week1:'', periods:8, classes:3, grade:GRADES[0], times:[], rooms:[], theme:'dawn', bg:null, bgBlur:8, customCourses:[], weekOverrides:{}, settings:{} };
+      state = { grid:{}, memo:'', teacher:'', week1:'', periods:8, classes:3, grade:GRADES[0], times:[], rooms:[], theme:'dawn', bg:null, bgBlur:8, customCourses:[], customGrades:[], weekOverrides:{}, settings:{} };
       render();
       openSetup(true);
       return;
@@ -4481,6 +4571,7 @@ var GENERIC_BLESSINGS = [
       }
       else if(act==='print') window.print();
       else if(act==='manage') openCourseManage();
+      else if(act==='manageGrade') openGradeManage();
       else if(act==='help') openHelp();
     });
   });
@@ -4512,6 +4603,11 @@ var GENERIC_BLESSINGS = [
     });
   });
   document.getElementById('btnManageCourses').addEventListener('click', openCourseManage);
+  document.getElementById('btnManageGrades').addEventListener('click', openGradeManage);
+  document.getElementById('btnUpdateNow').addEventListener('click', applyUpdateNow);
+  document.getElementById('btnUpdateLater').addEventListener('click', function(){
+    document.getElementById('updateBar').style.display = 'none';
+  });
   document.getElementById('weekBar').addEventListener('click', function(e){
     var b = e.target.closest('.btn[data-wk]');
     if(!b) return;
