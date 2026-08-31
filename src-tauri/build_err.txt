@@ -1,2 +1,0 @@
-   Compiling schedule v1.0.0 (G:\周课表\src-tauri)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 18.32s
