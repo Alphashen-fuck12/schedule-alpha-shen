@@ -186,15 +186,32 @@
         this.textContent = open?'备注':'收起';
       });
     });
-    // 倒计时
-    var np = nextPeriod(o);
-    if(np){ var tot=Math.ceil(np.ms/1000), mm=Math.floor(tot/60), ss=tot%60; els.count.textContent = '下一节 第'+(np.idx+1)+'节 '+(np.start)+' · 倒计时 '+mm+':'+('0'+ss).slice(-2); }
-    else els.count.textContent = '今日课程已结束';
     els.sub.textContent = (state.teacher?'为 '+esc(state.teacher)+' 老师':'')+' · 共 '+(any?els.lessons.querySelectorAll('.lesson').length:0)+' 节';
   }
   function tickClock(){
     var d=new Date();
     els.clock.textContent = ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+':'+('0'+d.getSeconds()).slice(-2);
+    if(!state) return;
+    var np = nextPeriod(state);
+    if(np){ var tot=Math.ceil(np.ms/1000), mm=Math.floor(tot/60), ss=tot%60; els.count.textContent = '下一节 第'+(np.idx+1)+'节 '+(np.start)+' · 倒计时 '+mm+':'+('0'+ss).slice(-2); }
+    else els.count.textContent = '今日课程已结束';
+    // 当前节次高亮（跨整点刷新）
+    var dIdx = todayIdx();
+    var P = state.periods||8;
+    var nowIdx = currentPeriodIdx(state);
+    var lessons = els.lessons.querySelectorAll('.lesson');
+    lessons.forEach(function(el, i){
+      var on = false;
+      // 依据行内时间判断是否当前节
+      var t = el.querySelector('.time');
+      if(t && nowIdx>=0){
+        var seg = t.textContent.trim().match(/(\d{1,2}):(\d{2})/);
+        if(seg && state.times&&state.times[nowIdx]){
+          on = el.textContent.indexOf(state.times[nowIdx])>=0;
+        }
+      }
+      el.classList.toggle('now', on);
+    });
   }
   // 上课提醒（小组件内）
   function remindCheck(){
@@ -220,8 +237,15 @@
       window.__TAURI__.event.listen('schedule:changed', function(){ render(); });
     }
   }
+  var lastSig = '';
+  function renderIfChanged(){
+    var o = load();
+    if(!o) return;
+    var sig = JSON.stringify({g:o.grid,t:o.times,s:o.settings});
+    if(sig!==lastSig){ lastSig = sig; render(); }
+  }
   render(); tickClock(); remindCheck();
-  setInterval(function(){ tickClock(); remindCheck(); render(); }, 1000);
+  setInterval(function(){ tickClock(); remindCheck(); renderIfChanged(); }, 1000);
   sync();
 })();
 </script>

@@ -7,15 +7,8 @@
     "frontendDist": "frontend"
   },
   "app": {
-    "windows": [
-      {
-        "title": "课表应用",
-        "width": 1280,
-        "height": 800,
-        "resizable": true,
-        "center": true
-      }
-    ],
+    "withGlobalTauri": true,
+    "windows": [],
     "security": {
       "csp": null
     }
