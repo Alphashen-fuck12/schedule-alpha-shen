@@ -22,6 +22,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 // ==================== 自动更新机制 ====================
 // 远程清单地址：可通过环境变量 SCHEDULE_UPDATE_URL 覆盖（便于测试/配置真实仓库）
 const UPDATE_URL_KEY: &str = "SCHEDULE_UPDATE_URL";
+// 占位符地址：发布前必须替换为真实 GitHub 仓库的 version.json 裸链接
+//（格式如 https://raw.githubusercontent.com/<owner>/<repo>/main/version.json），
+// 否则自动更新将无法拉取到清单。当前保持占位符值，仅作演示。
 const DEFAULT_UPDATE_URL: &str =
     "https://raw.githubusercontent.com/YOUR_REPO/schedule/main/version.json";
 // 更新暂存目录：%APPDATA%\schedule\update\
@@ -296,6 +299,11 @@ fn set_autostart(app: AppHandle, enabled: bool) {
 }
 
 #[tauri::command]
+fn get_autostart(app: AppHandle) -> bool {
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+#[tauri::command]
 fn set_widget_enabled(app: AppHandle, enabled: bool) {
     if let Some(widget) = app.get_webview_window("widget") {
         let _ = if enabled { widget.show() } else { widget.hide() };
@@ -313,6 +321,7 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             set_autostart,
+            get_autostart,
             set_widget_enabled,
             get_version,
             check_update,

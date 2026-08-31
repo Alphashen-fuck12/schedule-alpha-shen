@@ -603,6 +603,7 @@
     <h3>设置</h3>
     <div class="set-row"><span>字体</span>
       <div class="set-inline" id="setFonts"></div>
+      <div style="font-size:12px;color:#999;line-height:1.5;margin-top:4px">点击字体可即时预览，需点“保存设置”后生效</div>
     </div>
     <div class="set-row"><span>界面模式</span>
       <div class="set-inline" id="setModes">
@@ -4316,12 +4317,23 @@ var GENERIC_BLESSINGS = [
       b.addEventListener('click', function(){
         fontBox.querySelectorAll('button').forEach(function(x){x.classList.remove('active');});
         this.classList.add('active');
+        // 即时预览：立即应用所选字体（不落盘，需点“保存设置”生效）
+        var f = this.getAttribute('data-font');
+        document.body.style.setProperty('--font', "'"+f+"','Microsoft YaHei',sans-serif");
       });
     });
     document.querySelectorAll('#setModes button').forEach(function(b){
       b.classList.toggle('active', loadMode()===b.getAttribute('data-mode'));
     });
     document.getElementById('setAutoStart').checked = !!s.autoStart;
+    // 回填系统真实自启状态（失败静默兜底本地缓存值）
+    if(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke){
+      try{
+        window.__TAURI__.core.invoke('get_autostart').then(function(v){
+          document.getElementById('setAutoStart').checked = !!v;
+        }).catch(function(){});
+      }catch(e){}
+    }
     document.getElementById('setWidget').checked = s.widget !== false;
     document.getElementById('setRemind').checked = !!s.remind;
     document.getElementById('setRemindMin').value = s.remindMin;
@@ -4556,7 +4568,7 @@ var GENERIC_BLESSINGS = [
   });
   document.addEventListener('click', function(e){
     var m = document.getElementById('moreMenu');
-    if(m && m.classList.contains('show') && !e.target.closest('#moreWrap')){
+    if(m && m.classList.contains('show') && !e.target.closest('.more-wrap')){
       m.classList.remove('show');
     }
   });
