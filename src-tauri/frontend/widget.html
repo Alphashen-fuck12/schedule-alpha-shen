@@ -120,26 +120,46 @@
     var s = settings(o);
     var f = FONTS.indexOf(s.font)>=0 ? s.font : '微软雅黑';
     document.body.style.setProperty('--font', "'"+f+"','Microsoft YaHei',sans-serif");
-    var mode = 'glass';
-    try{ mode = localStorage.getItem(MODE_KEY)==='simple' ? 'simple' : 'glass'; }catch(e){}
+    // 默认简易模式（无毛玻璃、低功耗）；仅显式选择过 glass 才启用毛玻璃，外观不受影响
+    var mode = 'simple';
+    try{ mode = localStorage.getItem(MODE_KEY)==='glass' ? 'glass' : 'simple'; }catch(e){}
     document.body.setAttribute('data-mode', mode);
     els.foot.textContent = s.timeHint || '课表跟随系统时间自动校准';
   }
-  function currentPeriodIdx(o){
-    var now = new Date(), hm = now.getHours()*60+now.getMinutes(), times = o.times||[];
-    for(var p=0;p<times.length;p++){
-      var m=(times[p]||'').match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
-      if(m){ var s=parseInt(m[1],10)*60+parseInt(m[2],10), e=parseInt(m[3],10)*60+parseInt(m[4],10); if(hm>=s&&hm<e) return p; }
+  // 一次性解析节次时间并缓存，避免每秒正则匹配
+  function parseTimes(o){
+    var arr=[];
+    (o.times||[]).forEach(function(t,p){
+      var m=(t||'').match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+      if(m) arr[p]={ s:parseInt(m[1],10)*60+parseInt(m[2],10), e:parseInt(m[3],10)*60+parseInt(m[4],10), start:m[1]+':'+m[2] };
+    });
+    return arr;
+  }
+  var timesCache = null;
+  function currentPeriodIdx(){
+    if(!state) return -1;
+    if(!timesCache) timesCache=parseTimes(state);
+    var now=new Date(), hm=now.getHours()*60+now.getMinutes();
+    for(var p=0;p<timesCache.length;p++){
+      var x=timesCache[p];
+      if(x && hm>=x.s && hm<x.e) return p;
     }
     return -1;
   }
-  function nextPeriod(o){
-    var now=new Date(), hm=now.getHours()*60+now.getMinutes(), times=o.times||[];
-    for(var p=0;p<times.length;p++){
-      var m=(times[p]||'').match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
-      if(m){ var s=parseInt(m[1],10)*60+parseInt(m[2],10); if(hm<s){ var t=new Date(now); t.setHours(parseInt(m[1],10),parseInt(m[2],10),0,0); return {idx:p, ms:t-now, start:m[1]+':'+m[2]}; } }
+  // 下一节课信息缓存（仅 render / 跨节时重算）
+  var nextInfo = null, nextAt = 0;
+  function computeNext(){
+    if(!state){ nextInfo=null; nextAt=0; return; }
+    if(!timesCache) timesCache=parseTimes(state);
+    var now=new Date(), hm=now.getHours()*60+now.getMinutes();
+    for(var p=0;p<timesCache.length;p++){
+      var x=timesCache[p]; if(!x) continue;
+      if(hm<x.s){
+        var t=new Date(now); t.setHours(Math.floor(x.s/60), x.s%60, 0, 0);
+        nextInfo={idx:p, start:x.start}; nextAt=t.getTime(); return;
+      }
     }
-    return null;
+    nextInfo=null; nextAt=0;
   }
   function inDnd(s){
     if(!s.dndStart||!s.dndEnd) return false;
@@ -151,7 +171,7 @@
   }
   function render(){
     var o = load(); if(!o){ els.lessons.innerHTML = '<div class="no-lesson"><div class="big">📋</div>请先在主程序中导入课表</div>'; return; }
-    state = o; applyStyle(o);
+    state = o; applyStyle(o); timesCache = parseTimes(o); computeNext();
     var d = new Date();
     var dIdx = todayIdx();
     els.date.textContent = (d.getMonth()+1)+'月'+d.getDate()+'日 ' + (WEEKDAYS[dIdx]||'');
@@ -162,11 +182,10 @@
       var arr = o.grid[(dIdx)+'-'+p] || [];
       if(!arr.length) continue;
       any = true;
-      var isNow = (p===currentPeriodIdx(o));
       var t = o.times&&o.times[p]?o.times[p]:'';
       arr.forEach(function(e){
         var dot = courseColor(e.course,o);
-        html += '<div class="lesson'+(isNow?' now':'')+'">'
+        html += '<div class="lesson" data-p="'+p+'">'
              +   '<div class="row">'
              +   (dot?'<span class="dot" style="background:'+dot+'"></span>':'')
              +   '<span class="time">'+esc(t)+'</span>'
@@ -179,50 +198,50 @@
       });
     }
     els.lessons.innerHTML = any ? html : '<div class="no-lesson"><div class="big">🎉</div>今日无课，好好休息～</div>';
-    els.lessons.querySelectorAll('.memo-toggle').forEach(function(b){
-      b.addEventListener('click', function(){
-        var body = this.nextElementSibling;
-        var open = body.style.display!=='none';
-        body.style.display = open?'none':'block';
-        this.textContent = open?'备注':'收起';
-      });
-    });
-    els.sub.textContent = (state.teacher?'为 '+esc(state.teacher)+' 老师':'')+' · 共 '+(any?els.lessons.querySelectorAll('.lesson').length:0)+' 节';
+    lessonRows = els.lessons.querySelectorAll('.lesson');
+    updateNow();
+    els.sub.textContent = (state.teacher?'为 '+esc(state.teacher)+' 老师':'')+' · 共 '+(any?lessonRows.length:0)+' 节';
+  }
+  // 当前节高亮：节次变化时才刷新 DOM，避免每秒遍历
+  var lastNowIdx = -10;
+  function updateNow(){
+    var nowIdx = currentPeriodIdx();
+    if(nowIdx===lastNowIdx) return;
+    lastNowIdx = nowIdx;
+    for(var i=0;i<lessonRows.length;i++){
+      var on = parseInt(lessonRows[i].getAttribute('data-p'),10)===nowIdx;
+      lessonRows[i].classList.toggle('now', on);
+    }
   }
   function tickClock(){
     var d=new Date();
     els.clock.textContent = ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+':'+('0'+d.getSeconds()).slice(-2);
     if(!state) return;
-    var np = nextPeriod(state);
-    if(np){ var tot=Math.ceil(np.ms/1000), mm=Math.floor(tot/60), ss=tot%60; els.count.textContent = '下一节 第'+(np.idx+1)+'节 '+(np.start)+' · 倒计时 '+mm+':'+('0'+ss).slice(-2); }
-    else els.count.textContent = '今日课程已结束';
-    // 当前节次高亮（跨整点刷新）
-    var dIdx = todayIdx();
-    var P = state.periods||8;
-    var nowIdx = currentPeriodIdx(state);
-    var lessons = els.lessons.querySelectorAll('.lesson');
-    lessons.forEach(function(el, i){
-      var on = false;
-      // 依据行内时间判断是否当前节
-      var t = el.querySelector('.time');
-      if(t && nowIdx>=0){
-        var seg = t.textContent.trim().match(/(\d{1,2}):(\d{2})/);
-        if(seg && state.times&&state.times[nowIdx]){
-          on = el.textContent.indexOf(state.times[nowIdx])>=0;
-        }
+    var nowTs = Date.now();
+    if(nextAt>0){
+      var remain = nextAt - nowTs;
+      if(remain<=0){ computeNext(); remain = nextAt - nowTs; }
+      if(remain>0){
+        var tot=Math.ceil(remain/1000), mm=Math.floor(tot/60), ss=tot%60;
+        els.count.textContent = '下一节 第'+(nextInfo.idx+1)+'节 '+(nextInfo.start)+' · 倒计时 '+mm+':'+('0'+ss).slice(-2);
+      } else {
+        els.count.textContent = '今日课程已结束';
       }
-      el.classList.toggle('now', on);
-    });
+    } else {
+      els.count.textContent = '今日课程已结束';
+    }
+    // 节次高亮仅跨节时刷新（缓存计算，开销极小）
+    updateNow();
   }
-  // 上课提醒（小组件内）
+  // 上课提醒（小组件内，复用节次缓存，30s 低频检查）
   function remindCheck(){
     if(!state) return;
     var s = settings(state); if(!s.remind || inDnd(s)) return;
     var d=new Date(), dIdx=todayIdx(), nowMin=d.getHours()*60+d.getMinutes();
-    (state.times||[]).forEach(function(t,p){
-      var m=(t||'').match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
-      if(!m) return;
-      var start=parseInt(m[1],10)*60+parseInt(m[2],10);
+    if(!timesCache) timesCache = parseTimes(state);
+    for(var p=0;p<timesCache.length;p++){
+      var x = timesCache[p]; if(!x) continue;
+      var start=x.s;
       var lead=Math.max(0,parseInt(s.remindMin,10)||1);
       var diff=start-nowMin, k=dIdx+'-'+p;
       if(diff>=0&&diff<=lead&&(s.remindOnce===false||!reminded[k])){
@@ -231,7 +250,7 @@
         setTimeout(function(){ document.body.classList.remove('reminding'); },15000);
       }
       if(diff<0&&reminded[k]) delete reminded[k];
-    });
+    }
   }
   function sync(){
     if(window.__TAURI__ && window.__TAURI__.event && window.__TAURI__.event.listen){
@@ -242,11 +261,28 @@
   function renderIfChanged(){
     var o = load();
     if(!o) return;
-    var sig = JSON.stringify({g:o.grid,t:o.times,s:o.settings});
+    // 只对高频变化字段做轻量签名，避免每秒全量 JSON.stringify
+    var sig = (o.grid?Object.keys(o.grid).length:0)+'|'+(o.times?o.times.join('~'):'')+'|'+(o.settings?(o.settings.font||'')+(o.settings.timeHint||''):'');
     if(sig!==lastSig){ lastSig = sig; render(); }
   }
+  // memo 展开：事件委托，只绑定一次
+  els.lessons.addEventListener('click', function(e){
+    var t = e.target;
+    while(t && t!==els.lessons){
+      if(t.classList && t.classList.contains('memo-toggle')){
+        var body = t.nextElementSibling;
+        var open = body.style.display!=='none';
+        body.style.display = open?'none':'block';
+        t.textContent = open?'备注':'收起';
+        return;
+      }
+      t = t.parentNode;
+    }
+  });
   render(); tickClock(); remindCheck();
-  setInterval(function(){ tickClock(); remindCheck(); renderIfChanged(); }, 1000);
+  setInterval(tickClock, 1000);         // 秒级：仅时钟文本 + 缓存倒计时
+  setInterval(remindCheck, 30000);      // 提醒：30s 足够
+  setInterval(renderIfChanged, 15000);  // 兜底：15s 低频，主程序变更走事件
   sync();
 })();
 </script>

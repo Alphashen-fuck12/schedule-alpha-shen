@@ -3813,8 +3813,8 @@ var GENERIC_BLESSINGS = [
   // ---------- 渲染 ----------
   var MODE_KEY = 'elec_schedule_mode_v1';
   function loadMode(){
-    try{ return localStorage.getItem(MODE_KEY)==='simple' ? 'simple' : 'glass'; }
-    catch(e){ return 'glass'; }
+    try{ return localStorage.getItem(MODE_KEY)==='glass' ? 'glass' : 'simple'; }
+    catch(e){ return 'simple'; }
   }
   function applyMode(){
     var m = loadMode();
@@ -4345,7 +4345,7 @@ var GENERIC_BLESSINGS = [
   var FONTS = ['微软雅黑','宋体','楷体','黑体','等线'];
   function defaultSettings(){
     return {
-      font:'微软雅黑', mode:'', autoStart:false, widget:true,
+      font:'微软雅黑', mode:'', autoStart:false, widget:false,
       remind:false, remindMin:1, sound:true, dndStart:'', dndEnd:'',
       remindOnce:true, timeHint:''
     };
@@ -4383,7 +4383,15 @@ var GENERIC_BLESSINGS = [
         }).catch(function(){});
       }catch(e){}
     }
+    // 小组件开关回填 Rust 持久化状态（默认关闭）
     document.getElementById('setWidget').checked = s.widget !== false;
+    if(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke){
+      try{
+        window.__TAURI__.core.invoke('get_widget_enabled').then(function(v){
+          document.getElementById('setWidget').checked = !!v;
+        }).catch(function(){});
+      }catch(e){}
+    }
     document.getElementById('setRemind').checked = !!s.remind;
     document.getElementById('setRemindMin').value = s.remindMin;
     document.getElementById('setSound').checked = s.sound !== false;
@@ -4490,7 +4498,7 @@ var GENERIC_BLESSINGS = [
       }
     }catch(e){}
   }
-  // 每秒时钟：刷新当前节次高亮/倒计时/上课提醒
+  // 定时刷新（15s 低频）：刷新当前节次高亮/倒计时/上课提醒，跨节/跨分钟才重绘
   var lastNowRow = -1;
   function startTicker(){
     var prevMs = Date.now(), body = document.body;
@@ -4532,7 +4540,7 @@ var GENERIC_BLESSINGS = [
         prevMs = d.getTime();
         updateWeekBar();
       }
-    }, 1000);
+    }, 15000);
   }
 
   // ---------- 弹窗 ----------

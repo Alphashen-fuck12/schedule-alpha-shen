@@ -303,11 +303,69 @@ fn get_autostart(app: AppHandle) -> bool {
     app.autolaunch().is_enabled().unwrap_or(false)
 }
 
+/// 小组件开关状态文件：%APPDATA%\schedule\widget_enabled
+fn widget_state_path() -> PathBuf {
+    let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
+    base.join("schedule").join("widget_enabled")
+}
+
+fn load_widget_enabled() -> bool {
+    std::fs::read_to_string(widget_state_path())
+        .map(|s| s.trim() == "1")
+        .unwrap_or(false) // 默认关闭
+}
+
+fn save_widget_enabled(enabled: bool) {
+    if let Some(p) = widget_state_path().parent() {
+        let _ = std::fs::create_dir_all(p);
+    }
+    let _ = std::fs::write(widget_state_path(), if enabled { "1" } else { "0" });
+}
+
+/// 创建小组件窗口（已存在则跳过），带置底
+fn build_widget_window<M: tauri::Manager<tauri::Wry>>(app: &M) -> tauri::Result<()> {
+    if app.get_webview_window("widget").is_some() {
+        return Ok(());
+    }
+    let widget = tauri::WebviewWindowBuilder::new(
+        app,
+        "widget",
+        tauri::WebviewUrl::App("widget.html".into()),
+    )
+    .title("课表小组件")
+    .inner_size(320.0, 420.0)
+    .decorations(false)
+    .transparent(true)
+    .shadow(false)
+    .skip_taskbar(true)
+    .resizable(false)
+    .build()?;
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(hwnd) = widget.hwnd() {
+            set_widget_bottom(hwnd);
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn set_widget_enabled(app: AppHandle, enabled: bool) {
-    if let Some(widget) = app.get_webview_window("widget") {
-        let _ = if enabled { widget.show() } else { widget.hide() };
+    save_widget_enabled(enabled);
+    if enabled {
+        let _ = build_widget_window(&app);
+        if let Some(w) = app.get_webview_window("widget") {
+            let _ = w.show();
+        }
+    } else if let Some(widget) = app.get_webview_window("widget") {
+        let _ = widget.destroy(); // 销毁释放 WebView 内存，降低后台占用
     }
+}
+
+#[tauri::command]
+fn get_widget_enabled() -> bool {
+    load_widget_enabled()
 }
 
 fn main() {
@@ -323,6 +381,7 @@ fn main() {
             set_autostart,
             get_autostart,
             set_widget_enabled,
+            get_widget_enabled,
             get_version,
             check_update,
             apply_update
@@ -332,26 +391,9 @@ fn main() {
             let app_handle = app.handle().clone();
             std::thread::spawn(move || background_update_check(app_handle));
 
-            // 小组件窗口：无边框透明 320x420，可拖拽，置底
-            let widget = tauri::WebviewWindowBuilder::new(
-                app,
-                "widget",
-                tauri::WebviewUrl::App("widget.html".into()),
-            )
-            .title("课表小组件")
-            .inner_size(320.0, 420.0)
-            .decorations(false)
-            .transparent(true)
-            .shadow(false)
-            .skip_taskbar(true)
-            .resizable(false)
-            .build()?;
-
-            #[cfg(target_os = "windows")]
-            {
-                if let Ok(hwnd) = widget.hwnd() {
-                    set_widget_bottom(hwnd);
-                }
+            // 小组件窗口：仅当 --widget 自启模式 或 用户开启过小组件 时创建（默认关闭，省资源）
+            if widget_only || load_widget_enabled() {
+                let _ = build_widget_window(app);
             }
 
             // 主窗口（--widget 模式不创建，只留小组件收托盘）
@@ -395,6 +437,8 @@ fn main() {
                         }
                     }
                     "show_widget" => {
+                        save_widget_enabled(true);
+                        let _ = build_widget_window(app);
                         if let Some(w) = app.get_webview_window("widget") {
                             let _ = w.show();
                         }
@@ -418,11 +462,12 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // 小组件关闭改为隐藏（常驻托盘），避免误关退出
+            // 小组件关闭：持久化关闭状态并销毁窗口（释放 WebView 内存），避免误关退出
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "widget" {
                     api.prevent_close();
-                    let _ = window.hide();
+                    save_widget_enabled(false);
+                    let _ = window.destroy();
                 }
             }
         })
