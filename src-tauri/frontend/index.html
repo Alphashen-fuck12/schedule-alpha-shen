@@ -4117,6 +4117,7 @@ var GENERIC_BLESSINGS = [
     state.grid = {};
     state.memo = '';
     state.weekOverrides = {};
+    state.semesters[name] = currentSemesterSnapshot(); // v1.2.0 fix: 登记新学期，保证下拉立即可见可选
     save(); render();
     hideModal('setupBackdrop');
     alert('已新建学期「'+name+'」，已自动生成空课表框架（沿用节次/班级/年级设置），原学期「'+(Object.keys(sems).filter(function(k){return k!==name;}).join('、')||'上一学期')+'」内容已完整保留。');
@@ -4967,7 +4968,10 @@ var GENERIC_BLESSINGS = [
   }
   // 启动时：显示当前版本 + 检测已下载的新版本（二次登录提示：本次启动不打断，仅当暂存了新 exe 才提示）
   function initUpdate(){
-    if(!hasTauri()) return;
+    if(!hasTauri()){
+      showVersion('1.2.0'); // 浏览器版：写入静态版本号
+      return;
+    }
     window.__TAURI__.core.invoke('get_version').then(showVersion).catch(function(){});
     window.__TAURI__.core.invoke('check_update').then(function(r){
       if(r && r.has_new && r.downloaded){
