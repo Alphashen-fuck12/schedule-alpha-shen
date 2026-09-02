@@ -368,6 +368,27 @@ fn get_widget_enabled() -> bool {
     load_widget_enabled()
 }
 
+/// v1.2.0：Excel/备份导出走原生保存对话框 + 文件写入（WebView2 下 a[download] 无效的替代通道）
+/// 返回：保存成功的绝对路径 / "__cancel__"（用户取消）/ 错误信息
+#[tauri::command]
+fn save_text_file(default_name: String, content: String) -> Result<String, String> {
+    let handle = std::thread::spawn(move || {
+        let path = rfd::FileDialog::new()
+            .set_file_name(&default_name)
+            .add_filter("文本/JSON 文件", &["json", "txt", "csv"])
+            .save_file();
+        match path {
+            Some(p) => std::fs::write(&p, content.as_bytes())
+                .map(|_| p.to_string_lossy().to_string())
+                .map_err(|e| e.to_string()),
+            None => Ok("__cancel__".to_string()),
+        }
+    });
+    handle
+        .join()
+        .map_err(|_| "保存对话框异常".to_string())?
+}
+
 fn main() {
     let widget_only = std::env::args().any(|a| a == "--widget");
 
@@ -384,7 +405,8 @@ fn main() {
             get_widget_enabled,
             get_version,
             check_update,
-            apply_update
+            apply_update,
+            save_text_file
         ])
         .setup(move |app| {
             // 后台静默检查更新（不阻塞启动，失败静默）

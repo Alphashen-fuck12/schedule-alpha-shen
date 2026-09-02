@@ -231,6 +231,8 @@
   /* 设置面板 */
   .set-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px dashed var(--line)}
   .set-row:last-child{border-bottom:none}
+  .set-row.disabled{opacity:.45;pointer-events:none}
+  .set-row .widget-tip{font-size:12px;color:var(--accent);margin-top:2px}
   .set-row .set-label{font-size:15px;font-weight:600;color:var(--ink)}
   .set-row .set-sub{font-size:12px;color:var(--ink-soft);margin-top:2px}
   .set-row input[type=number],.set-row input[type=time],.set-row select{width:auto;padding:7px 10px;font-size:14px}
@@ -343,9 +345,32 @@
   /* 备份操作 */
   .backup-ops{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
 
+  /* ============ 首页（v1.2.0） ============ */
+  #homeView .home-layout{display:flex;gap:22px;flex-wrap:wrap;margin-top:6px}
+  #homeView .home-card{flex:1 1 340px;min-width:280px;padding:18px 20px;border-radius:16px;background:rgba(255,255,255,.5);border:1px solid var(--line)}
+  #homeView .home-card h3{font-size:17px;font-weight:700;margin-bottom:12px;color:var(--ink)}
+  #homeView .home-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}
+  .cal-table{width:100%;border-collapse:collapse;table-layout:fixed}
+  .cal-table th{font-size:13px;color:var(--ink-soft);font-weight:600;padding:6px 2px;text-align:center}
+  .cal-table td{padding:4px 2px;text-align:center;vertical-align:middle}
+  .cal-day{position:relative;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:14px;color:var(--ink);transition:.15s;border:1px solid transparent}
+  .cal-day:hover{background:rgba(47,107,255,.12)}
+  .cal-day.empty{visibility:hidden;pointer-events:none}
+  .cal-day.has-class::after{content:"";position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:var(--accent)}
+  .cal-day.today{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-weight:700}
+  .cal-day.today.has-class::after{background:#fff}
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .cal-head .cal-nav{display:flex;gap:6px;align-items:center}
+  .cal-head .cal-nav .btn{min-width:30px;padding:4px 8px}
+  #homeToday .today-row{display:flex;justify-content:space-between;align-items:center;padding:9px 2px;border-bottom:1px dashed var(--line);font-size:15px}
+  #homeToday .today-row:last-child{border-bottom:none}
+  #homeToday .today-num{font-weight:700;color:var(--accent)}
+  #homeToday .today-empty{color:var(--ink-soft);font-size:14px;line-height:1.7}
+  #homeToday .next-tip{margin-top:10px;padding:10px 12px;border-radius:12px;background:rgba(47,107,255,.08);color:#2f5bd0;font-size:14px}
+
   /* ============ 打印（干净版式） ============ */
   @media print{
-    header .actions,#swapPanel,#printBtn,.modal-backdrop,.theme-bar,#bgLayer{display:none !important}
+    header .actions,#swapPanel,#printBtn,.modal-backdrop,.theme-bar,#bgLayer,#homeView{display:none !important}
     body{background:#fff !important;padding:0}
     header{box-shadow:none;border:none;padding:0 0 14px}
     header h1{font-size:24px}
@@ -378,6 +403,29 @@
   .update-bar #btnUpdateNow{background:#fff;color:#2f6bff;border-color:#fff;font-weight:600}
   .update-bar #btnUpdateNow:hover{background:#f0f3ff}
 </style>
+<script>
+/* 兼容性加固：NodeList.forEach / Element.matches / Element.closest polyfill（老内核 WebView/浏览器） */
+if (typeof NodeList !== 'undefined' && !NodeList.prototype.forEach) {
+  NodeList.prototype.forEach = function (fn, thisArg) {
+    for (var i = 0; i < this.length; i++) fn.call(thisArg || null, this[i], i, this);
+  };
+}
+if (typeof Element !== 'undefined') {
+  if (!Element.prototype.matches) {
+    Element.prototype.matches = Element.prototype.msMatchesSelector || Element.prototype.webkitMatchesSelector || function (sel) { return false; };
+  }
+  if (!Element.prototype.closest) {
+    Element.prototype.closest = function (sel) {
+      var el = this;
+      while (el && el.nodeType === 1) {
+        if (el.matches && el.matches(sel)) return el;
+        el = el.parentElement || el.parentNode;
+      }
+      return null;
+    };
+  }
+}
+</script>
 </head>
 <body>
 
@@ -409,9 +457,12 @@
   </div>
   <div id="weekBadge"></div>
   <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap">
+    <button class="btn" id="btnViewToggle">课表视图</button>
     <button class="btn ghost" id="btnSettings">课表设置</button>
     <button class="btn ghost" id="btnMode">简洁模式</button>
     <button class="btn" id="btnExcel">导出Excel</button>
+    <button class="btn ghost" id="btnExportTop">导出备份</button>
+    <button class="btn ghost" id="btnImportTop">导入备份</button>
     <button class="btn" id="btnBless">祝福</button>
     <span class="more-wrap">
       <button class="btn" id="btnMore">更多 ▾</button>
@@ -430,6 +481,30 @@
 </header>
 
 <main id="appMain">
+  <!-- 首页视图（v1.2.0 新增）：日历 + 今日概览 + 快捷入口 -->
+  <section id="homeView" class="glass" style="display:none">
+    <div class="card-head">
+      <h2>今日课表</h2>
+      <span class="hint" id="homeHint"></span>
+    </div>
+    <div class="home-layout">
+      <div class="home-card">
+        <h3>本月日历</h3>
+        <div id="homeCal"></div>
+      </div>
+      <div class="home-card">
+        <h3 id="homeTodayTitle">今日概览</h3>
+        <div id="homeToday"></div>
+      </div>
+    </div>
+    <div class="home-actions">
+      <button class="btn" id="btnHomeBless">每日祝福</button>
+      <button class="btn ghost" id="btnHomeSwap">智能换课</button>
+      <button class="btn ghost" id="btnHomeMemo">备忘录</button>
+      <button class="btn ghost" id="btnHomeExport">导出备份</button>
+    </div>
+  </section>
+  <section id="gridView">
   <section id="gridWrap" class="glass">
     <div class="card-head">
       <h2 id="gridTitle">本周课表</h2>
@@ -485,6 +560,7 @@
       <div id="histBox"><div class="hist-empty">暂无操作</div></div>
     </div>
   </aside>
+  </section>
 </main>
 
 <!-- 首次引导 / 设置 弹窗 -->
@@ -492,6 +568,14 @@
   <div class="modal glass" style="position:relative">
     <button class="close-x" data-close="setupBackdrop">×</button>
     <h3 id="setupTitle">首次使用 · 创建课表</h3>
+    <div class="sem-box" style="padding:12px 14px;border:1px dashed var(--line);border-radius:12px;margin-bottom:14px">
+      <div class="field" style="margin-bottom:8px"><label>当前学期（可切换历史学期）</label><select id="semSelect"></select></div>
+      <div class="row">
+        <div class="field"><label>新建学期名称</label><input type="text" id="semNew" placeholder="如：2026-2027 第一学期"></div>
+        <div style="display:flex;align-items:flex-end"><button class="btn ghost small" id="btnSemCreate" type="button">新建学期</button></div>
+      </div>
+      <div class="sem-hint" id="semHint" style="font-size:13px;color:var(--ink-soft);margin-top:6px"></div>
+    </div>
     <div class="field"><label>老师名</label><input type="text" id="inpTeacher" placeholder="如：王老师"></div>
     <div class="row">
       <div class="field"><label>第 1 周周一日期</label><input type="date" id="inpDate"></div>
@@ -645,7 +729,7 @@
     <div class="set-row"><span>开机自启</span>
       <label class="switch"><input type="checkbox" id="setAutoStart"><span class="slider"></span></label>
     </div>
-    <div class="set-row"><span>桌面小组件</span>
+    <div class="set-row" id="widgetRow"><span>桌面小组件<span class="widget-tip" id="widgetTip"></span></span>
       <label class="switch"><input type="checkbox" id="setWidget"><span class="slider"></span></label>
     </div>
     <div class="set-row set-head">上课提醒</div>
@@ -3609,6 +3693,26 @@ var GENERIC_BLESSINGS = [
       if(!obj.customGrades) obj.customGrades = [];
       if(!obj.weekOverrides) obj.weekOverrides = {};
       if(!obj.settings) obj.settings = {};
+      // v1.2.0：学期支持——旧数据迁移为默认学期
+      if(!obj.semesters) obj.semesters = {};
+      if(!obj.semester){
+        obj.semester = autoSemesterName();
+        if(!obj.semesters[obj.semester]){
+          obj.semesters[obj.semester] = {
+            teacher: obj.teacher, week1: obj.week1, periods: obj.periods, classes: obj.classes,
+            grade: obj.grade, times: obj.times, rooms: obj.rooms, grid: obj.grid, memo: obj.memo,
+            weekOverrides: obj.weekOverrides, customCourses: obj.customCourses,
+            customGrades: obj.customGrades, customClasses: obj.customClasses, settings: obj.settings
+          };
+        }
+      } else if(!obj.semesters[obj.semester]){
+        obj.semesters[obj.semester] = {
+          teacher: obj.teacher, week1: obj.week1, periods: obj.periods, classes: obj.classes,
+          grade: obj.grade, times: obj.times, rooms: obj.rooms, grid: obj.grid, memo: obj.memo,
+          weekOverrides: obj.weekOverrides, customCourses: obj.customCourses,
+          customGrades: obj.customGrades, customClasses: obj.customClasses, settings: obj.settings
+        };
+      }
       return obj;
     }catch(e){ return null; }
   }
@@ -3753,7 +3857,7 @@ var GENERIC_BLESSINGS = [
            + '<button class="del-btn" data-del="'+esc(c.name)+'">删除</button>'
            + '</div></div>';
     }).join('');
-    box.querySelectorAll('[data-pin]').forEach(function(b){
+    [].forEach.call(box.querySelectorAll('[data-pin]'), function(b){
       b.addEventListener('click', function(){
         var c = listItems(key).filter(function(x){ return x.name===this.dataset.pin; })[0];
         if(c) c.pinned = !c.pinned;
@@ -3761,7 +3865,7 @@ var GENERIC_BLESSINGS = [
         if(refillFn) refillFn();
       });
     });
-    box.querySelectorAll('[data-del]').forEach(function(b){
+    [].forEach.call(box.querySelectorAll('[data-del]'), function(b){
       b.addEventListener('click', function(){
         state[key] = listItems(key).filter(function(x){ return x.name!==this.dataset.del; });
         save(); renderManageOf(key, preset, boxId, refillFn);
@@ -3810,11 +3914,219 @@ var GENERIC_BLESSINGS = [
     return t;
   }
 
+  // ---------- 首页（v1.2.0） ----------
+  var VIEW_KEY = 'elec_schedule_view_v1'; // 'home' | 'grid'
+  var CAL_MONTH = null; // null=当前月；否则为 Date(当月初)
+  function viewMode(){
+    try{ return localStorage.getItem(VIEW_KEY)==='grid' ? 'grid' : 'home'; }
+    catch(e){ return 'home'; }
+  }
+  function saveViewMode(m){ try{ localStorage.setItem(VIEW_KEY, m); }catch(e){} }
+  function homeVisible(){ var hv = document.getElementById('homeView'); return !!hv && hv.style.display!=='none'; }
+  function showHome(){
+    document.getElementById('homeView').style.display = '';
+    document.getElementById('gridView').style.display = 'none';
+    document.getElementById('btnViewToggle').textContent = '课表视图';
+    renderHome();
+    saveViewMode('home');
+  }
+  function showGrid(){
+    document.getElementById('gridView').style.display = '';
+    document.getElementById('homeView').style.display = 'none';
+    document.getElementById('btnViewToggle').textContent = '首页';
+    saveViewMode('grid');
+  }
+  function applyViewMode(){ if(viewMode()==='home') showHome(); else showGrid(); }
+  // 某日期（周一-周五）是否有课
+  function dayHasClass(dt){
+    var wd = (dt.getDay()+6)%7;
+    if(wd<0||wd>4) return false;
+    var P = state.periods || 8;
+    for(var p=0;p<P;p++){
+      var arr = state.grid[wd+'-'+p];
+      if(arr && arr.length) return true;
+    }
+    return false;
+  }
+  // 点击日历日期：跳转到对应周课表（0-3 周范围内）
+  function goToDate(ds){
+    var t = new Date(ds + 'T00:00:00');
+    var base = state.week1 ? new Date(state.week1+'T00:00:00') : new Date();
+    var m1 = mondayOf(base), m2 = mondayOf(t);
+    var diff = Math.round((m2 - m1)/86400000/7);
+    if(diff>=0 && diff<=3){
+      viewWeek = diff;
+      saveViewWeek();
+      render();
+      showGrid();
+    } else {
+      viewWeek = 0;
+      saveViewWeek();
+      render();
+      showGrid();
+      alert(diff>3 ? '该日期超出当前可预览的 3 周范围，已为你切换到本周课表。' : '该日期早于课表起始周，已为你切换到本周课表。');
+    }
+  }
+  function renderCal(){
+    var box = document.getElementById('homeCal');
+    if(!box) return;
+    var now = new Date();
+    var view = CAL_MONTH ? new Date(CAL_MONTH.getFullYear(), CAL_MONTH.getMonth(), 1) : new Date(now.getFullYear(), now.getMonth(), 1);
+    var y = view.getFullYear(), mo = view.getMonth();
+    var lead = (new Date(y, mo, 1).getDay()+6)%7; // 周一开头
+    var days = new Date(y, mo+1, 0).getDate();
+    var today = new Date(); today.setHours(0,0,0,0);
+    var html = '<div class="cal-head"><span style="font-weight:700;font-size:16px">'+y+'年'+(mo+1)+'月</span>'
+      + '<span class="cal-nav"><button class="btn ghost small" id="calPrev">‹</button><button class="btn ghost small" id="calToday">今</button><button class="btn ghost small" id="calNext">›</button></span></div>';
+    html += '<table class="cal-table"><tr>' + ['一','二','三','四','五','六','日'].map(function(w){ return '<th>'+w+'</th>'; }).join('') + '</tr>';
+    var cells = [];
+    for(var i=0;i<lead;i++) cells.push('<td><span class="cal-day empty"></span></td>');
+    for(var d=1; d<=days; d++){
+      var dt = new Date(y, mo, d); dt.setHours(0,0,0,0);
+      var has = dayHasClass(dt);
+      var isToday = dt.getTime()===today.getTime();
+      var cls = 'cal-day' + (isToday ? ' today' : '') + (has ? ' has-class' : '');
+      cells.push('<td><span class="'+cls+'" data-date="'+dateToStr(dt)+'">'+d+'</span></td>');
+    }
+    while(cells.length % 7 !== 0) cells.push('<td><span class="cal-day empty"></span></td>');
+    for(var r=0; r<cells.length; r+=7) html += '<tr>' + cells.slice(r,r+7).join('') + '</tr>';
+    html += '</table>';
+    box.innerHTML = html;
+  }
+  function renderToday(){
+    var box = document.getElementById('homeToday');
+    if(!box) return;
+    var d = todayIdx();
+    var title = document.getElementById('homeTodayTitle');
+    if(d>4){
+      title.textContent = '今日概览 · 周末';
+      box.innerHTML = '<div class="today-empty">今天是周末，没有排课。<br>去逛逛“备忘录”或“每日祝福”吧～</div>';
+      return;
+    }
+    title.textContent = '今日概览 · ' + WEEKDAYS[d];
+    var P = state.periods || 8;
+    var rows = [], cnt = 0;
+    for(var p=0;p<P;p++){
+      var arr = state.grid[d+'-'+p] || [];
+      if(arr.length){
+        cnt++;
+        var t = (state.times && state.times[p]) ? state.times[p] : '';
+        var names = arr.map(function(e){ return e.course; }).join('、');
+        rows.push('<div class="today-row"><span>第 '+(p+1)+' 节'+(t ? ' <small style="color:var(--ink-soft)">'+esc(t)+'</small>' : '')+'</span><span class="today-num">'+esc(names)+'</span></div>');
+      }
+    }
+    if(!cnt){
+      box.innerHTML = '<div class="today-empty">今天暂无课程安排。<br>点击任意格子即可添加课程。</div>';
+      return;
+    }
+    var next = '';
+    var cp = currentPeriodIdx();
+    var np = nextPeriodMs();
+    if(cp>=0) next = '<div class="next-tip">正在上第 '+(cp+1)+' 节</div>';
+    else if(np>=0){
+      var total = Math.ceil(np/1000);
+      var mm = Math.floor(total/60), ss = total%60;
+      next = '<div class="next-tip">下一节还有 '+mm+' 分 '+('0'+ss).slice(-2)+' 秒开始</div>';
+    }
+    box.innerHTML = rows.join('') + next;
+  }
+  function renderHome(){
+    var hint = document.getElementById('homeHint');
+    if(hint) hint.textContent = '点击日历日期可跳转到对应课表 · 有课日用圆点标记';
+    renderCal();
+    renderToday();
+  }
+
+  // ---------- 学期管理（v1.2.0） ----------
+  function autoSemesterName(){
+    var now = new Date();
+    var y = now.getFullYear();
+    var startY = (now.getMonth()+1 >= 8) ? y : y-1;
+    return startY + '-' + (startY+1) + ' 第1学期';
+  }
+  // 当前活动学期 -> 快照对象（不含 semesters/semester 本身）
+  function currentSemesterSnapshot(){
+    return {
+      teacher: state.teacher, week1: state.week1, periods: state.periods, classes: state.classes,
+      grade: state.grade, times: state.times||[], rooms: state.rooms||[], grid: state.grid,
+      memo: state.memo||'', weekOverrides: state.weekOverrides||{},
+      customCourses: state.customCourses||[], customGrades: state.customGrades||[],
+      customClasses: state.customClasses||[], settings: state.settings||{}
+    };
+  }
+  function semNames(){
+    var sems = state.semesters || {};
+    var keys = [];
+    for(var k in sems){ if(Object.prototype.hasOwnProperty.call(sems,k)) keys.push(k); }
+    return keys;
+  }
+  function refreshSemUI(){
+    var sel = document.getElementById('semSelect');
+    if(!sel) return;
+    var cur = state.semester || autoSemesterName();
+    var keys = semNames();
+    var html = '';
+    if(keys.length===0) html += '<option value="">（无学期，保存后将自动创建）</option>';
+    for(var i=0;i<keys.length;i++){
+      var k = keys[i];
+      html += '<option value="'+esc(k)+'"'+(k===cur?' selected':'')+'>'+esc(k)+(k===cur?'（当前）':'')+'</option>';
+    }
+    sel.innerHTML = html;
+    var hint = document.getElementById('semHint');
+    if(hint) hint.textContent = '当前学期：' + (cur||'（未命名）') + '。新建学期会自动复制本学期的设置并生成空课表，旧学期数据完整保留。';
+  }
+  // 切换学期：保存当前 -> 载入目标
+  function switchSemester(name){
+    if(!name || name === state.semester){ refreshSemUI(); return; }
+    var sems = state.semesters || {};
+    // 保存当前学期
+    sems[state.semester || autoSemesterName()] = currentSemesterSnapshot();
+    // 载入目标（目标必须已有数据，否则用当前骨架兜底）
+    var t = sems[name] || currentSemesterSnapshot();
+    state.semester = name;
+    state.teacher = t.teacher || state.teacher;
+    state.week1 = t.week1 || state.week1;
+    state.periods = t.periods || state.periods || 8;
+    state.classes = t.classes || state.classes || 3;
+    state.grade = t.grade || state.grade || GRADES[0];
+    state.times = t.times || state.times || [];
+    state.rooms = t.rooms || state.rooms || [];
+    state.grid = t.grid || {};
+    state.memo = t.memo || '';
+    state.weekOverrides = t.weekOverrides || {};
+    state.customCourses = t.customCourses || state.customCourses || [];
+    state.customGrades = t.customGrades || state.customGrades || [];
+    state.customClasses = t.customClasses || state.customClasses || [];
+    state.settings = t.settings || state.settings || {};
+    state.semesters = sems;
+    save(); render();
+    hideModal('setupBackdrop');
+    alert('已切换到学期：' + name);
+  }
+  // 新建学期：保留当前内容到旧学期，生成空课表框架
+  function createSemester(){
+    var inp = document.getElementById('semNew');
+    var name = (inp && inp.value.trim()) || '';
+    if(!name){ alert('请输入学期名称'); return; }
+    var sems = state.semesters || {};
+    if(sems[name]){ alert('该学期「'+name+'」已存在，请换一个名称。'); return; }
+    sems[state.semester || autoSemesterName()] = currentSemesterSnapshot();
+    state.semesters = sems;
+    state.semester = name;
+    state.week1 = dateToStr(mondayOf(new Date())); // 新学期从当前周一开始
+    state.grid = {};
+    state.memo = '';
+    state.weekOverrides = {};
+    save(); render();
+    hideModal('setupBackdrop');
+    alert('已新建学期「'+name+'」，已自动生成空课表框架（沿用节次/班级/年级设置），原学期「'+(Object.keys(sems).filter(function(k){return k!==name;}).join('、')||'上一学期')+'」内容已完整保留。');
+  }
+
   // ---------- 渲染 ----------
   var MODE_KEY = 'elec_schedule_mode_v1';
   function loadMode(){
-    try{ return localStorage.getItem(MODE_KEY)==='simple' ? 'simple' : 'glass'; }
-    catch(e){ return 'glass'; }
+    try{ return localStorage.getItem(MODE_KEY)==='glass' ? 'glass' : 'simple'; }
+    catch(e){ return 'simple'; }
   }
   function applyMode(){
     var m = loadMode();
@@ -3850,7 +4162,7 @@ var GENERIC_BLESSINGS = [
   function updateWeekBar(){
     var bar = document.getElementById('weekBar');
     if(!bar) return;
-    bar.querySelectorAll('.btn[data-wk]').forEach(function(b){
+    [].forEach.call(bar.querySelectorAll('.btn[data-wk]'), function(b){
       b.classList.toggle('active', parseInt(b.getAttribute('data-wk'),10)===viewWeek);
     });
     var info = document.getElementById('weekBarInfo');
@@ -3871,7 +4183,7 @@ var GENERIC_BLESSINGS = [
   function applyTheme(){
     var t = THEMES.indexOf(state.theme)>=0 ? state.theme : 'dawn';
     document.body.setAttribute('data-theme', t);
-    document.querySelectorAll('.theme-btn').forEach(function(btn){
+    [].forEach.call(document.querySelectorAll('.theme-btn'), function(btn){
       btn.classList.toggle('active', btn.getAttribute('data-theme')===t);
     });
   }
@@ -3990,14 +4302,14 @@ var GENERIC_BLESSINGS = [
       rows += '</tr>';
     }
     box.innerHTML = '<table id="grid">'+rows+'</table>';
-    box.querySelectorAll('#grid td[data-key]').forEach(function(td){
+    [].forEach.call(box.querySelectorAll('#grid td[data-key]'), function(td){
       td.addEventListener('click', function(){
         openCell(parseInt(this.dataset.key.split('-')[0],10),
                  parseInt(this.dataset.key.split('-')[1],10));
       });
     });
     // 备注展开/收起（点击不触发格子编辑）
-    box.querySelectorAll('.note-toggle').forEach(function(b){
+    [].forEach.call(box.querySelectorAll('.note-toggle'), function(b){
       b.addEventListener('click', function(ev){
         ev.stopPropagation();
         var body = this.nextElementSibling;
@@ -4043,6 +4355,8 @@ var GENERIC_BLESSINGS = [
     var times = (state.times && state.times.length) ? state.times.join('\n') : defaultTimes();
     document.getElementById('inpTimes').value = times;
     document.getElementById('inpRooms').value = (state.rooms||[]).join('\n');
+    document.getElementById('semNew').value = '';
+    refreshSemUI();
     showModal('setupBackdrop');
   }
   function defaultTimes(){
@@ -4059,6 +4373,35 @@ var GENERIC_BLESSINGS = [
     var times = [];
     for(var p=0;p<periods;p++){ times.push(lines[p]||''); }
     var rooms = document.getElementById('inpRooms').value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+    // v1.2.0：学期处理——新建学期名优先，否则沿用当前学期；编辑结果写回该学期快照
+    var semNew = (document.getElementById('semNew') && document.getElementById('semNew').value.trim()) || '';
+    var semName = semNew || state.semester || autoSemesterName();
+    var sems = (state && state.semesters) || {};
+    var existed = !!sems[semName];
+    sems[semName] = {
+      teacher: teacher,
+      week1: document.getElementById('inpDate').value || dateToStr(mondayOf(new Date())),
+      periods: periods,
+      classes: classes,
+      grade: document.getElementById('inpGrade').value,
+      times: times,
+      rooms: rooms,
+      grid: (state && state.grid) || {},
+      memo: (state && state.memo) || '',
+      weekOverrides: (state && state.weekOverrides) || {},
+      customCourses: (state && state.customCourses) || [],
+      customGrades: (state && state.customGrades) || [],
+      customClasses: (state && state.customClasses) || [],
+      settings: (state && state.settings) || {}
+    };
+    // 若新建学期：沿用旧学期设置，但生成空课表框架
+    var isNewSem = semNew && !existed;
+    if(isNewSem){
+      sems[semName].grid = {};
+      sems[semName].memo = '';
+      sems[semName].weekOverrides = {};
+      state.week1 = sems[semName].week1;
+    }
     state = {
       teacher: teacher,
       week1: document.getElementById('inpDate').value || dateToStr(mondayOf(new Date())),
@@ -4070,13 +4413,15 @@ var GENERIC_BLESSINGS = [
       theme: state.theme || 'dawn',
       bg: state.bg || null,
       bgBlur: (state.bgBlur!=null? state.bgBlur : 8),
-      grid: (state && state.grid) || {},
-      memo: (state && state.memo) || '',
+      grid: isNewSem ? {} : ((state && state.grid) || {}),
+      memo: isNewSem ? '' : ((state && state.memo) || ''),
       customCourses: (state && state.customCourses) || [],
       customGrades: (state && state.customGrades) || [],
       customClasses: (state && state.customClasses) || [],
-      weekOverrides: (state && state.weekOverrides) || {},
-      settings: (state && state.settings) || {}
+      weekOverrides: isNewSem ? {} : ((state && state.weekOverrides) || {}),
+      settings: (state && state.settings) || {},
+      semester: semName,
+      semesters: sems
     };
     if(state.grade) recordCustomGrade(state.grade);
     save();
@@ -4120,17 +4465,35 @@ var GENERIC_BLESSINGS = [
   }
 
   // ---------- 备份 ----------
-  function exportBackup(){
-    var data = JSON.stringify(state, null, 2);
-    var blob = new Blob([data], {type:'application/json'});
+  // v1.2.0：Tauri（exe/WebView2）环境下 a[download] 可能无反应，统一走 Rust 保存对话框；失败/浏览器版回退为浏览器下载
+  function tauriSaveText(defaultName, content, mime){
+    if(!(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke)) return false;
+    return window.__TAURI__.core.invoke('save_text_file', { defaultName: defaultName, content: content, mimeType: mime || 'text/plain' })
+      .then(function(r){ return typeof r === 'string' && r.length > 0 && r !== '__cancel__'; })
+      .catch(function(){ return false; });
+  }
+  // 浏览器版下载：延迟 revokeObjectURL，确保 WebView2/老内核有足够时间触发下载
+  function browserDownloadText(name, content, mime){
+    var blob = new Blob([content], {type: mime || 'text/plain'});
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = '电子记课表备份_' + (state.teacher||'课表') + '.json';
+    a.download = name;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+  }
+  function exportBackup(){
+    var data = JSON.stringify(state, null, 2);
+    var defaultName = '电子记课表备份_' + (state.teacher||'课表') + '.json';
+    if(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke){
+      tauriSaveText(defaultName, data, 'application/json').then(function(ok){
+        if(!ok) browserDownloadText(defaultName, data, 'application/json');
+      });
+      return;
+    }
+    browserDownloadText(defaultName, data, 'application/json');
   }
   // ---------- 导出 Excel（CSV，UTF-8 带 BOM，Excel/WPS 可打开不乱码） ----------
   function csvCell(s){
@@ -4157,41 +4520,54 @@ var GENERIC_BLESSINGS = [
       }
     }
     var csv = '\ufeff' + lines.join('\r\n'); // BOM 确保 Excel 识别 UTF-8
-    var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
     var d = new Date();
     var ds = d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
-    a.download = '课表_' + (state.teacher||'课表') + '_' + ds + '.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    var defaultName = '课表_' + (state.teacher||'课表') + '_' + ds + '.csv';
+    // v1.2.0：Tauri（WebView2）下 a[download] 无反应，走 Rust 保存对话框
+    if(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke){
+      tauriSaveText(defaultName, csv, 'text/csv').then(function(ok){
+        if(!ok) browserDownloadText(defaultName, csv, 'text/csv;charset=utf-8;');
+      });
+      return;
+    }
+    browserDownloadText(defaultName, csv, 'text/csv;charset=utf-8;');
   }
   function importBackup(file){
     if(!file) return;
     var reader = new FileReader();
     reader.onload = function(e){
+      var text = e.target.result;
+      var obj;
       try{
-        var obj = JSON.parse(e.target.result);
-        if(!obj || typeof obj !== 'object' || !obj.teacher){ throw new Error('bad'); }
-        if(!obj.grid) obj.grid = {};
-        if(!obj.memo) obj.memo = '';
-        if(!obj.theme) obj.theme = 'dawn';
-        if(!obj.rooms) obj.rooms = [];
-        if(obj.bgBlur == null) obj.bgBlur = 8;
-        if(!obj.customCourses) obj.customCourses = [];
-        if(!obj.customGrades) obj.customGrades = [];
-        if(!obj.customClasses) obj.customClasses = [];
-        if(!obj.weekOverrides) obj.weekOverrides = {};
-        if(!obj.settings) obj.settings = {};
-        state = obj;
-        save(); render();
-        alert('导入成功！');
+        obj = JSON.parse(text);
       }catch(err){
-        alert('导入失败：文件格式不正确');
+        alert('导入失败：所选文件不是有效的 JSON 备份文件，请选择由本应用“导出备份”生成的 .json 文件。');
+        return;
       }
+      if(!obj || typeof obj !== 'object'){
+        alert('导入失败：备份文件内容为空。');
+        return;
+      }
+      if(!obj.teacher){
+        alert('导入失败：文件内容不是本应用的课表备份（缺少老师名信息），无法导入。');
+        return;
+      }
+      // 兼容旧版备份：补齐缺失字段
+      if(!obj.grid) obj.grid = {};
+      if(!obj.memo) obj.memo = '';
+      if(!obj.theme) obj.theme = 'dawn';
+      if(!obj.rooms) obj.rooms = [];
+      if(obj.bgBlur == null) obj.bgBlur = 8;
+      if(!obj.customCourses) obj.customCourses = [];
+      if(!obj.customGrades) obj.customGrades = [];
+      if(!obj.customClasses) obj.customClasses = [];
+      if(!obj.weekOverrides) obj.weekOverrides = {};
+      if(!obj.settings) obj.settings = {};
+      if(!obj.semesters) obj.semesters = {};
+      if(!obj.semester) obj.semester = '';
+      state = obj;
+      save(); render();
+      alert('导入成功！已恢复 ' + (obj.teacher||'') + ' 的课表。');
     };
     reader.readAsText(file);
   }
@@ -4228,7 +4604,7 @@ var GENERIC_BLESSINGS = [
            +   '<button class="del-btn" data-i="'+i+'">删除</button>'
            + '</div>';
     }).join('');
-    box.querySelectorAll('.del-btn').forEach(function(btn){
+    [].forEach.call(box.querySelectorAll('.del-btn'), function(btn){
       btn.addEventListener('click', function(){
         var kk2 = cellKey.split('-');
         var d = parseInt(kk2[0],10), p = parseInt(kk2[1],10);
@@ -4253,7 +4629,10 @@ var GENERIC_BLESSINGS = [
     if(e.cls) recordCustomClass(e.cls);
     var kk = cellKey.split('-');
     var d = parseInt(kk[0],10), p = parseInt(kk[1],10);
-    cellFor(d,p,viewWeek).push(e);
+    // v1.2.0 修复：cellFor 在空格子（offset=0 且 state.grid[k] 不存在）时返回临时数组，push 不会写回；
+    // 改为 concat + setCell 写回型写入，确保空白格首次添加也能持久化
+    var arr = cellFor(d,p,viewWeek).concat([e]);
+    setCell(d,p,arr,viewWeek);
     save();
     document.getElementById('addRoom').value = '';
     document.getElementById('addNote').value = '';
@@ -4345,7 +4724,7 @@ var GENERIC_BLESSINGS = [
   var FONTS = ['微软雅黑','宋体','楷体','黑体','等线'];
   function defaultSettings(){
     return {
-      font:'微软雅黑', mode:'', autoStart:false, widget:true,
+      font:'微软雅黑', mode:'', autoStart:false, widget:false,
       remind:false, remindMin:1, sound:true, dndStart:'', dndEnd:'',
       remindOnce:true, timeHint:''
     };
@@ -4362,16 +4741,16 @@ var GENERIC_BLESSINGS = [
     fontBox.innerHTML = FONTS.map(function(f){
       return '<button class="btn ghost small'+(s.font===f?' active':'')+'" data-font="'+f+'">'+f+'</button>';
     }).join('');
-    fontBox.querySelectorAll('button').forEach(function(b){
+    [].forEach.call(fontBox.querySelectorAll('button'), function(b){
       b.addEventListener('click', function(){
-        fontBox.querySelectorAll('button').forEach(function(x){x.classList.remove('active');});
+        [].forEach.call(fontBox.querySelectorAll('button'), function(x){x.classList.remove('active');});
         this.classList.add('active');
         // 即时预览：立即应用所选字体（不落盘，需点“保存设置”生效）
         var f = this.getAttribute('data-font');
         document.body.style.setProperty('--font', "'"+f+"','Microsoft YaHei',sans-serif");
       });
     });
-    document.querySelectorAll('#setModes button').forEach(function(b){
+    [].forEach.call(document.querySelectorAll('#setModes button'), function(b){
       b.classList.toggle('active', loadMode()===b.getAttribute('data-mode'));
     });
     document.getElementById('setAutoStart').checked = !!s.autoStart;
@@ -4383,7 +4762,26 @@ var GENERIC_BLESSINGS = [
         }).catch(function(){});
       }catch(e){}
     }
-    document.getElementById('setWidget').checked = s.widget !== false;
+    // 小组件开关回填 Rust 持久化状态（默认关闭）；非 Tauri（浏览器版）禁用并提示
+    var isTauriEnv = !!(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke);
+    var widgetRow = document.getElementById('widgetRow');
+    var widgetTip = document.getElementById('widgetTip');
+    if(!isTauriEnv){
+      if(widgetRow) widgetRow.classList.add('disabled');
+      if(widgetTip) widgetTip.textContent = '桌面小组件需 exe 版支持';
+      document.getElementById('setWidget').checked = false;
+    } else {
+      if(widgetRow) widgetRow.classList.remove('disabled');
+      if(widgetTip) widgetTip.textContent = '';
+      document.getElementById('setWidget').checked = s.widget !== false;
+    }
+    if(isTauriEnv){
+      try{
+        window.__TAURI__.core.invoke('get_widget_enabled').then(function(v){
+          document.getElementById('setWidget').checked = !!v;
+        }).catch(function(){});
+      }catch(e){}
+    }
     document.getElementById('setRemind').checked = !!s.remind;
     document.getElementById('setRemindMin').value = s.remindMin;
     document.getElementById('setSound').checked = s.sound !== false;
@@ -4401,7 +4799,10 @@ var GENERIC_BLESSINGS = [
     var m = modeBtn ? modeBtn.getAttribute('data-mode') : loadMode();
     try{ localStorage.setItem(MODE_KEY, m); }catch(e){}
     s.autoStart = document.getElementById('setAutoStart').checked;
-    s.widget = document.getElementById('setWidget').checked;
+    // 非 Tauri 环境小组件开关被禁用，不覆盖 s.widget（保持原值，避免误关/误开）
+    if(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke){
+      s.widget = document.getElementById('setWidget').checked;
+    }
     s.remind = document.getElementById('setRemind').checked;
     s.remindMin = parseInt(document.getElementById('setRemindMin').value,10)||1;
     s.sound = document.getElementById('setSound').checked;
@@ -4490,7 +4891,7 @@ var GENERIC_BLESSINGS = [
       }
     }catch(e){}
   }
-  // 每秒时钟：刷新当前节次高亮/倒计时/上课提醒
+  // 定时刷新（15s 低频）：刷新当前节次高亮/倒计时/上课提醒，跨节/跨分钟才重绘
   var lastNowRow = -1;
   function startTicker(){
     var prevMs = Date.now(), body = document.body;
@@ -4503,6 +4904,7 @@ var GENERIC_BLESSINGS = [
       if(cp !== lastNowRow){
         lastNowRow = cp;
         renderGrid(); renderHeader(); updateWeekBar();
+        if(homeVisible()) renderHome();
       }
       // 上课提醒：到点前 remindMin 分钟
       if(s.remind && !inDnd()){
@@ -4532,7 +4934,7 @@ var GENERIC_BLESSINGS = [
         prevMs = d.getTime();
         updateWeekBar();
       }
-    }, 1000);
+    }, 15000);
   }
 
   // ---------- 弹窗 ----------
@@ -4591,10 +4993,13 @@ var GENERIC_BLESSINGS = [
       return;
     }
     render();
+    applyViewMode(); // v1.2.0：非首次启动默认进入首页（可被 localStorage 记忆覆盖）
   }
 
   // 事件绑定
   document.getElementById('btnSaveSetup').addEventListener('click', saveSetup);
+  document.getElementById('btnSemCreate').addEventListener('click', createSemester);
+  document.getElementById('semSelect').addEventListener('change', function(){ switchSemester(this.value); });
   document.getElementById('btnSettings').addEventListener('click', function(){ openSetup(false); });
   document.getElementById('btnPickBg').addEventListener('click', function(){ document.getElementById('bgFile').click(); });
   document.getElementById('bgFile').addEventListener('change', function(){ pickBg(this.files[0]); });
@@ -4605,7 +5010,7 @@ var GENERIC_BLESSINGS = [
     if(state.bg) applyBackground();
     save();
   });
-  document.querySelectorAll('.theme-btn').forEach(function(btn){
+  [].forEach.call(document.querySelectorAll('.theme-btn'), function(btn){
     btn.addEventListener('click', function(){
       state.theme = this.getAttribute('data-theme');
       save(); applyTheme();
@@ -4621,7 +5026,7 @@ var GENERIC_BLESSINGS = [
       m.classList.remove('show');
     }
   });
-  document.querySelectorAll('#moreMenu [data-act]').forEach(function(b){
+  [].forEach.call(document.querySelectorAll('#moreMenu [data-act]'), function(b){
     b.addEventListener('click', function(){
       var act = this.getAttribute('data-act');
       document.getElementById('moreMenu').classList.remove('show');
@@ -4641,6 +5046,29 @@ var GENERIC_BLESSINGS = [
   document.getElementById('btnSaveAppSettings').addEventListener('click', saveAppSettings);
   document.getElementById('btnMode').addEventListener('click', toggleMode);
   document.getElementById('btnExcel').addEventListener('click', exportCsv);
+  // v1.2.0：首页视图切换 + 顶栏导出/导入前置按钮
+  document.getElementById('btnViewToggle').addEventListener('click', function(){
+    if(homeVisible()) showGrid(); else showHome();
+  });
+  document.getElementById('btnExportTop').addEventListener('click', exportBackup);
+  document.getElementById('btnImportTop').addEventListener('click', function(){ document.getElementById('importFile').click(); });
+  document.getElementById('btnHomeBless').addEventListener('click', showBlessCard);
+  document.getElementById('btnHomeSwap').addEventListener('click', function(){ showGrid(); });
+  document.getElementById('btnHomeMemo').addEventListener('click', function(){
+    document.getElementById('inpMemo').value = state.memo || '';
+    showModal('memoBackdrop');
+  });
+  document.getElementById('btnHomeExport').addEventListener('click', exportBackup);
+  document.getElementById('homeCal').addEventListener('click', function(e){
+    var t = e.target;
+    if(t.id==='calPrev'){ CAL_MONTH = new Date(CAL_MONTH ? CAL_MONTH.getFullYear() : new Date().getFullYear(), (CAL_MONTH ? CAL_MONTH.getMonth() : new Date().getMonth())-1, 1); renderCal(); return; }
+    if(t.id==='calNext'){ CAL_MONTH = new Date(CAL_MONTH ? CAL_MONTH.getFullYear() : new Date().getFullYear(), (CAL_MONTH ? CAL_MONTH.getMonth() : new Date().getMonth())+1, 1); renderCal(); return; }
+    if(t.id==='calToday'){ CAL_MONTH = null; renderCal(); return; }
+    var el = t.closest ? t.closest('.cal-day') : null;
+    if(!el || el.classList.contains('empty')) return;
+    var ds = el.getAttribute('data-date');
+    if(ds) goToDate(ds);
+  });
   document.getElementById('inpMemo').addEventListener('input', function(){
     state.memo = this.value; save();
   });
@@ -4656,10 +5084,10 @@ var GENERIC_BLESSINGS = [
     document.getElementById('blessTitle').textContent = b.title;
     document.getElementById('blessText').textContent = b.text;
   });
-  document.querySelectorAll('.close-x, [data-close]').forEach(function(el){
+  [].forEach.call(document.querySelectorAll('.close-x, [data-close]'), function(el){
     el.addEventListener('click', function(){ hideModal(el.dataset.close); });
   });
-  document.querySelectorAll('.modal-backdrop').forEach(function(bd){
+  [].forEach.call(document.querySelectorAll('.modal-backdrop'), function(bd){
     bd.addEventListener('click', function(e){
       if(e.target===bd) bd.classList.remove('show');
     });
