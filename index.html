@@ -3630,18 +3630,9 @@ var GENERIC_BLESSINGS = [
       }
       if(hasSur && hasSub) cand.push(p);
     }
+    // v1.2.0 S5：仅凭“学科”无法唯一确定是哪位老师，删除原“学科唯一”自动匹配分支，避免张冠李戴；
+    // 候选不止一个（或仅学科命中）时返回 null，由通用祝福兜底
     if(cand.length === 1) return cand[0];
-    // 3) 学科（唯一）
-    var subOnly = [];
-    for(i=0;i<BLESS_PROFILES.length;i++){
-      p = BLESS_PROFILES[i];
-      var hs = false;
-      for(s=0;s<sig.length;s++){
-        if(sig[s].indexOf(p.subject) >= 0){ hs = true; break; }
-      }
-      if(hs && subOnly.indexOf(p) < 0) subOnly.push(p);
-    }
-    if(subOnly.length === 1) return subOnly[0];
     return null;
   }
   function genericTeacherName(){
@@ -3678,6 +3669,28 @@ var GENERIC_BLESSINGS = [
   }
 
   // ---------- 工具 ----------
+  // v1.2.0：学期迁移——保证任何入口（加载/导入）都有当前学期与对应快照，快照一律深拷贝防串档
+  function migrateSemesters(obj){
+    if(!obj.semesters) obj.semesters = {};
+    var snap = {
+      teacher: obj.teacher, week1: obj.week1, periods: obj.periods, classes: obj.classes,
+      grade: obj.grade, times: deep(obj.times), rooms: deep(obj.rooms), grid: deep(obj.grid), memo: obj.memo,
+      weekOverrides: deep(obj.weekOverrides), customCourses: deep(obj.customCourses),
+      customGrades: deep(obj.customGrades), customClasses: deep(obj.customClasses), settings: deep(obj.settings)
+    };
+    if(!obj.semester || !obj.semesters[obj.semester]){
+      // v1.2.0 S6：semester 为空或与快照不匹配时，若已有多学期则沿用第一个，避免旧备份生成冗余“默认学期”
+      var names = Object.keys(obj.semesters);
+      if(names.length) obj.semester = names[0];
+    }
+    if(!obj.semester){
+      obj.semester = autoSemesterName();
+      if(!obj.semesters[obj.semester]) obj.semesters[obj.semester] = snap;
+    } else if(!obj.semesters[obj.semester]){
+      obj.semesters[obj.semester] = snap;
+    }
+    return obj;
+  }
   function load(){
     try{
       var raw = localStorage.getItem(STORAGE_KEY);
@@ -3694,25 +3707,7 @@ var GENERIC_BLESSINGS = [
       if(!obj.weekOverrides) obj.weekOverrides = {};
       if(!obj.settings) obj.settings = {};
       // v1.2.0：学期支持——旧数据迁移为默认学期
-      if(!obj.semesters) obj.semesters = {};
-      if(!obj.semester){
-        obj.semester = autoSemesterName();
-        if(!obj.semesters[obj.semester]){
-          obj.semesters[obj.semester] = {
-            teacher: obj.teacher, week1: obj.week1, periods: obj.periods, classes: obj.classes,
-            grade: obj.grade, times: obj.times, rooms: obj.rooms, grid: obj.grid, memo: obj.memo,
-            weekOverrides: obj.weekOverrides, customCourses: obj.customCourses,
-            customGrades: obj.customGrades, customClasses: obj.customClasses, settings: obj.settings
-          };
-        }
-      } else if(!obj.semesters[obj.semester]){
-        obj.semesters[obj.semester] = {
-          teacher: obj.teacher, week1: obj.week1, periods: obj.periods, classes: obj.classes,
-          grade: obj.grade, times: obj.times, rooms: obj.rooms, grid: obj.grid, memo: obj.memo,
-          weekOverrides: obj.weekOverrides, customCourses: obj.customCourses,
-          customGrades: obj.customGrades, customClasses: obj.customClasses, settings: obj.settings
-        };
-      }
+      migrateSemesters(obj);
       return obj;
     }catch(e){ return null; }
   }
@@ -3730,6 +3725,12 @@ var GENERIC_BLESSINGS = [
         window.__TAURI__.event.emit('schedule:changed', { ts: Date.now() });
       }
     }catch(e){}
+  }
+  // 深拷贝：防止学期快照与活动状态共享引用导致“引用串档”
+  function deep(o){
+    if(o === undefined || o === null) return o;
+    try{ return JSON.parse(JSON.stringify(o)); }
+    catch(e){ return Array.isArray(o) ? [] : {}; }
   }
   function esc(s){
     return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -3766,12 +3767,13 @@ var GENERIC_BLESSINGS = [
     m.setDate(m.getDate() + (offset||0)*7);
     return dateToStr(m);
   }
-  // 某格在指定周的生效内容：override 优先，否则模板
+  // 某格在指定周的生效内容：override 优先（含显式空覆盖[]），否则模板
   function cellFor(d,p,offset){
     var k = key(d,p);
     if(offset){
       var ov = state.weekOverrides[weekKeyOf(offset)];
-      if(ov && ov[k] && ov[k].length) return ov[k];
+      // v1.2.0 S2：ov[k] 存在即生效（含空数组=本周显式清空），不再用 length 误判成“沿用默认”
+      if(ov && ov[k] !== undefined) return ov[k];
     }
     return state.grid[k] || [];
   }
@@ -3780,8 +3782,8 @@ var GENERIC_BLESSINGS = [
     var wk = weekKeyOf(offset);
     if(!state.weekOverrides[wk]) state.weekOverrides[wk] = {};
     var k = key(d,p);
-    if(!arr || !arr.length) delete state.weekOverrides[wk][k];
-    else state.weekOverrides[wk][k] = arr;
+    // v1.2.0 S2：空数组写显式空覆盖（表示“本周该格为空”），不能 delete——delete 会退化为沿用默认模板
+    state.weekOverrides[wk][k] = (arr && arr.length) ? arr : [];
     if(!Object.keys(state.weekOverrides[wk]).length) delete state.weekOverrides[wk];
   }
   function clsOptions(){
@@ -3937,13 +3939,21 @@ var GENERIC_BLESSINGS = [
     saveViewMode('grid');
   }
   function applyViewMode(){ if(viewMode()==='home') showHome(); else showGrid(); }
-  // 某日期（周一-周五）是否有课
+  // v1.2.0 M1：某日期落在的预览周 offset（0-3）；超出预览范围按模板(0)处理
+  function weekOffsetOfDate(dt){
+    var base = state.week1 ? new Date(state.week1+'T00:00:00') : new Date();
+    var m1 = mondayOf(base), m2 = mondayOf(dt);
+    var diff = Math.round((m2 - m1)/86400000/7);
+    return (diff>=0 && diff<=3) ? diff : 0;
+  }
+  // 某日期（周一-周五）是否有课（v1.2.0 M1：按该日期对应周的生效课表判断，含 override）
   function dayHasClass(dt){
     var wd = (dt.getDay()+6)%7;
     if(wd<0||wd>4) return false;
+    var off = weekOffsetOfDate(dt);
     var P = state.periods || 8;
     for(var p=0;p<P;p++){
-      var arr = state.grid[wd+'-'+p];
+      var arr = cellFor(wd,p,off);
       if(arr && arr.length) return true;
     }
     return false;
@@ -4006,8 +4016,10 @@ var GENERIC_BLESSINGS = [
     title.textContent = '今日概览 · ' + WEEKDAYS[d];
     var P = state.periods || 8;
     var rows = [], cnt = 0;
+    // v1.2.0 M1：今日概览读取当天生效课表（含未来周 override 对今天的影响）
+    var offToday = weekOffsetOfDate(new Date());
     for(var p=0;p<P;p++){
-      var arr = state.grid[d+'-'+p] || [];
+      var arr = cellFor(d,p,offToday) || [];
       if(arr.length){
         cnt++;
         var t = (state.times && state.times[p]) ? state.times[p] : '';
@@ -4044,14 +4056,14 @@ var GENERIC_BLESSINGS = [
     var startY = (now.getMonth()+1 >= 8) ? y : y-1;
     return startY + '-' + (startY+1) + ' 第1学期';
   }
-  // 当前活动学期 -> 快照对象（不含 semesters/semester 本身）
+  // 当前活动学期 -> 快照对象（不含 semesters/semester 本身）；关键数组/对象深拷贝，防止与活动 state 共享引用
   function currentSemesterSnapshot(){
     return {
       teacher: state.teacher, week1: state.week1, periods: state.periods, classes: state.classes,
-      grade: state.grade, times: state.times||[], rooms: state.rooms||[], grid: state.grid,
-      memo: state.memo||'', weekOverrides: state.weekOverrides||{},
-      customCourses: state.customCourses||[], customGrades: state.customGrades||[],
-      customClasses: state.customClasses||[], settings: state.settings||{}
+      grade: state.grade, times: deep(state.times||[]), rooms: deep(state.rooms||[]), grid: deep(state.grid),
+      memo: state.memo||'', weekOverrides: deep(state.weekOverrides||{}),
+      customCourses: deep(state.customCourses||[]), customGrades: deep(state.customGrades||[]),
+      customClasses: deep(state.customClasses||[]), settings: deep(state.settings||{})
     };
   }
   function semNames(){
@@ -4089,15 +4101,16 @@ var GENERIC_BLESSINGS = [
     state.periods = t.periods || state.periods || 8;
     state.classes = t.classes || state.classes || 3;
     state.grade = t.grade || state.grade || GRADES[0];
-    state.times = t.times || state.times || [];
-    state.rooms = t.rooms || state.rooms || [];
-    state.grid = t.grid || {};
+    // v1.2.0 S1：载入快照全部深拷贝，避免活动 state 与学期快照共享引用、编辑时污染历史学期数据
+    state.times = deep(t.times || state.times || []);
+    state.rooms = deep(t.rooms || state.rooms || []);
+    state.grid = deep(t.grid || {});
     state.memo = t.memo || '';
-    state.weekOverrides = t.weekOverrides || {};
-    state.customCourses = t.customCourses || state.customCourses || [];
-    state.customGrades = t.customGrades || state.customGrades || [];
-    state.customClasses = t.customClasses || state.customClasses || [];
-    state.settings = t.settings || state.settings || {};
+    state.weekOverrides = deep(t.weekOverrides || {});
+    state.customCourses = deep(t.customCourses || state.customCourses || []);
+    state.customGrades = deep(t.customGrades || state.customGrades || []);
+    state.customClasses = deep(t.customClasses || state.customClasses || []);
+    state.settings = deep(t.settings || state.settings || {});
     state.semesters = sems;
     save(); render();
     hideModal('setupBackdrop');
@@ -4376,6 +4389,14 @@ var GENERIC_BLESSINGS = [
     var rooms = document.getElementById('inpRooms').value.split('\n').map(function(s){return s.trim();}).filter(Boolean);
     // v1.2.0：学期处理——新建学期名优先，否则沿用当前学期；编辑结果写回该学期快照
     var semNew = (document.getElementById('semNew') && document.getElementById('semNew').value.trim()) || '';
+    // S1 修复：禁止用已存在的学期名新建，否则会静默覆盖旧学期数据并造成引用串档
+    if(semNew){
+      var sems0 = (state && state.semesters) || {};
+      if(sems0[semNew]){
+        alert('学期「'+semNew+'」已存在。如需修改该学期，请直接在下方下拉框选中它再保存；请勿用相同名称新建。');
+        return;
+      }
+    }
     var semName = semNew || state.semester || autoSemesterName();
     var sems = (state && state.semesters) || {};
     var existed = !!sems[semName];
@@ -4387,13 +4408,13 @@ var GENERIC_BLESSINGS = [
       grade: document.getElementById('inpGrade').value,
       times: times,
       rooms: rooms,
-      grid: (state && state.grid) || {},
+      grid: deep((state && state.grid) || {}),
       memo: (state && state.memo) || '',
-      weekOverrides: (state && state.weekOverrides) || {},
-      customCourses: (state && state.customCourses) || [],
-      customGrades: (state && state.customGrades) || [],
-      customClasses: (state && state.customClasses) || [],
-      settings: (state && state.settings) || {}
+      weekOverrides: deep((state && state.weekOverrides) || {}),
+      customCourses: deep((state && state.customCourses) || []),
+      customGrades: deep((state && state.customGrades) || []),
+      customClasses: deep((state && state.customClasses) || []),
+      settings: deep((state && state.settings) || {})
     };
     // 若新建学期：沿用旧学期设置，但生成空课表框架
     var isNewSem = semNew && !existed;
@@ -4470,7 +4491,11 @@ var GENERIC_BLESSINGS = [
   function tauriSaveText(defaultName, content, mime){
     if(!(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke)) return false;
     return window.__TAURI__.core.invoke('save_text_file', { defaultName: defaultName, content: content, mimeType: mime || 'text/plain' })
-      .then(function(r){ return typeof r === 'string' && r.length > 0 && r !== '__cancel__'; })
+      .then(function(r){
+        // v1.2.0 M7：用户取消对话框返回 __cancel__，需与“保存失败”区分开，取消时不得回退浏览器下载
+        if(r === '__cancel__') return 'cancel';
+        return (typeof r === 'string' && r.length > 0) ? true : false;
+      })
       .catch(function(){ return false; });
   }
   // 浏览器版下载：延迟 revokeObjectURL，确保 WebView2/老内核有足够时间触发下载
@@ -4490,7 +4515,7 @@ var GENERIC_BLESSINGS = [
     var defaultName = '电子记课表备份_' + (state.teacher||'课表') + '.json';
     if(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke){
       tauriSaveText(defaultName, data, 'application/json').then(function(ok){
-        if(!ok) browserDownloadText(defaultName, data, 'application/json');
+        if(ok === false) browserDownloadText(defaultName, data, 'application/json'); // 仅保存失败时回退；取消(__cancel__)不下载
       });
       return;
     }
@@ -4508,7 +4533,8 @@ var GENERIC_BLESSINGS = [
     for(var p=0;p<P;p++){
       var t = state.times && state.times[p] ? state.times[p] : '';
       for(var d=0;d<5;d++){
-        var arr = state.grid[key(d,p)] || [];
+        // v1.2.0 M2：导出当前查看周的生效课表（含该周 override），不再只读默认模板
+        var arr = cellFor(d,p,viewWeek) || [];
         if(!arr.length){
           lines.push([WEEKDAYS[d], '第'+(p+1)+'节', t, '', '', '', '', ''].map(csvCell).join(','));
         } else {
@@ -4527,7 +4553,7 @@ var GENERIC_BLESSINGS = [
     // v1.2.0：Tauri（WebView2）下 a[download] 无反应，走 Rust 保存对话框
     if(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke){
       tauriSaveText(defaultName, csv, 'text/csv').then(function(ok){
-        if(!ok) browserDownloadText(defaultName, csv, 'text/csv;charset=utf-8;');
+        if(ok === false) browserDownloadText(defaultName, csv, 'text/csv;charset=utf-8;'); // 仅保存失败时回退；取消(__cancel__)不下载
       });
       return;
     }
@@ -4564,8 +4590,9 @@ var GENERIC_BLESSINGS = [
       if(!obj.customClasses) obj.customClasses = [];
       if(!obj.weekOverrides) obj.weekOverrides = {};
       if(!obj.settings) obj.settings = {};
-      if(!obj.semesters) obj.semesters = {};
-      if(!obj.semester) obj.semester = '';
+      // v1.2.0 S6：导入后统一走学期迁移——旧版备份（无 semester/semesters）补默认学期；
+      // semester 为空串或与 semesters 不匹配时校正到有效学期
+      migrateSemesters(obj);
       state = obj;
       save(); render();
       alert('导入成功！已恢复 ' + (obj.teacher||'') + ' 的课表。');
@@ -4609,9 +4636,11 @@ var GENERIC_BLESSINGS = [
       btn.addEventListener('click', function(){
         var kk2 = cellKey.split('-');
         var d = parseInt(kk2[0],10), p = parseInt(kk2[1],10);
-        var arr2 = cellFor(d,p,viewWeek);
-        arr2.splice(parseInt(this.dataset.i,10),1);
-        if(!arr2.length) setCell(d,p,[],viewWeek);
+        // v1.2.0 S3：先取生效内容副本再删除后写回，禁止直接 splice 模板引用（否则预览周误改默认课表）
+        var i = parseInt(this.dataset.i,10);
+        var cur = (cellFor(d,p,viewWeek)||[]).slice();
+        var arr2 = cur.slice(0,i).concat(cur.slice(i+1));
+        setCell(d,p,arr2,viewWeek);
         save(); renderEntryList(); renderGrid(); renderHeader();
       });
     });
@@ -4899,6 +4928,8 @@ var GENERIC_BLESSINGS = [
     setInterval(function(){
       var s = getSettings();
       var d = new Date();
+      // v1.2.0 M4：主程序心跳，widget 据此判断主程序是否在运行，避免双重提醒
+      try{ localStorage.setItem('elec_schedule_beat_v1', String(Date.now())); }catch(e){}
       var todayIdxD = todayIdx();
       // 重新渲染当前节次行高亮（跨节时刷新）
       var cp = currentPeriodIdx();
@@ -4919,13 +4950,18 @@ var GENERIC_BLESSINGS = [
           var nowMin = d.getHours()*60 + d.getMinutes();
           var diff = startMin - nowMin;
           var keyR = todayIdxD + '-' + p;
-          if(diff >= 0 && diff <= lead && (s.remindOnce===false || !remindedPeriods[keyR])){
-            remindedPeriods[keyR] = true;
-            body.classList.add('reminding');
-            showRemindToast('上课提醒：第 '+(p+1)+' 节 '+(s.remindMin||1)+' 分钟后开始');
-            sysNotify('上课提醒', '第 '+(p+1)+' 节还有 '+(s.remindMin||1)+' 分钟开始');
-            playRemindSound();
-            setTimeout(function(){ body.classList.remove('reminding'); }, 15000);
+          if(diff >= 0 && diff <= lead){
+            // v1.2.0 S4：remindOnce=false 时按“分钟”去重——同节课同一分钟内只提醒一次，杜绝 15s ticker 轰炸
+            var prevR = remindedPeriods[keyR];
+            var canRemind = (s.remindOnce === false) ? (prevR !== nowMin) : !prevR;
+            if(canRemind){
+              remindedPeriods[keyR] = (s.remindOnce === false) ? nowMin : true;
+              body.classList.add('reminding');
+              showRemindToast('上课提醒：第 '+(p+1)+' 节 '+(s.remindMin||1)+' 分钟后开始');
+              sysNotify('上课提醒', '第 '+(p+1)+' 节还有 '+(s.remindMin||1)+' 分钟开始');
+              playRemindSound();
+              setTimeout(function(){ body.classList.remove('reminding'); }, 15000);
+            }
           }
           if(diff < 0 && remindedPeriods[keyR]) delete remindedPeriods[keyR];
         }
@@ -5126,7 +5162,17 @@ var GENERIC_BLESSINGS = [
   });
 
   init();
-  if(state && state.teacher) showBlessCard();
+  // v1.2.0 S5：启动祝福改为“每天至多自动弹一次”（localStorage 记录日期），不再每次启动都弹；手动点按钮不受限
+  (function(){
+    var n = new Date();
+    var todayStr = n.getFullYear()+'-'+(n.getMonth()+1)+'-'+n.getDate();
+    var lastBless = '';
+    try{ lastBless = localStorage.getItem('elec_schedule_bless_date_v1') || ''; }catch(e){}
+    if(state && state.teacher && lastBless !== todayStr){
+      try{ localStorage.setItem('elec_schedule_bless_date_v1', todayStr); }catch(e){}
+      showBlessCard();
+    }
+  })();
   startTicker();
 })();
 </script>

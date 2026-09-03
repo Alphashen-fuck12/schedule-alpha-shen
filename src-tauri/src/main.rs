@@ -22,9 +22,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 // ==================== 自动更新机制 ====================
 // 远程清单地址：可通过环境变量 SCHEDULE_UPDATE_URL 覆盖（便于测试/配置真实仓库）
 const UPDATE_URL_KEY: &str = "SCHEDULE_UPDATE_URL";
-// 占位符地址：发布前必须替换为真实 GitHub 仓库的 version.json 裸链接
-//（格式如 https://raw.githubusercontent.com/<owner>/<repo>/master/version.json），
-// 否则自动更新将无法拉取到清单。当前保持占位符值，仅作演示。
+// 更新清单地址：指向发布仓库根目录的 version.json 裸链接
+//（格式如 https://raw.githubusercontent.com/<owner>/<repo>/master/version.json）。
+// v1.2.0 M10：正式发布后请确认该仓库确实存在并已放置 version.json；
+// 若拉取失败/超时/仓库不存在，后台检查与“检查更新”均静默失败、不影响课表正常使用。
 const DEFAULT_UPDATE_URL: &str =
     "https://raw.githubusercontent.com/Alphashen-fuck12/schedule-alpha-shen/master/version.json";
 // 更新暂存目录：%APPDATA%\schedule\update\

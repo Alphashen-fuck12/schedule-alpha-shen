@@ -110,6 +110,33 @@
   function isCustom(c, o){ return (o.customCourses||[]).some(function(x){ return x.name===c; }); }
   function courseColor(c, o){ var x=(o.customCourses||[]).filter(function(z){return z.name===c;})[0]; return x?x.color:''; }
   function clsLabel(c){ c = String(c==null?'':c); return /班$/.test(c) ? c : (c+'班'); }
+  // v1.2.0 M3：与主程序一致的周 override 生效逻辑，widget 显示当天真实课表
+  function mondayOfDate(d){
+    var m = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    var dow = (m.getDay()+6)%7;
+    m.setDate(m.getDate() - dow);
+    return m;
+  }
+  function weekKeyOf(offset, o){
+    var base = (o && o.week1) ? new Date(o.week1+'T00:00:00') : new Date();
+    var m = mondayOfDate(base);
+    m.setDate(m.getDate() + (offset||0)*7);
+    return m.getFullYear()+'-'+('0'+(m.getMonth()+1)).slice(-2)+'-'+('0'+m.getDate()).slice(-2);
+  }
+  function weekOffsetOfDate(dt, o){
+    var base = (o && o.week1) ? new Date(o.week1+'T00:00:00') : new Date();
+    var m1 = mondayOfDate(base), m2 = mondayOfDate(dt);
+    var diff = Math.round((m2 - m1)/86400000/7);
+    return (diff>=0 && diff<=3) ? diff : 0;
+  }
+  function cellFor(d, p, offset, o){
+    var k = d+'-'+p;
+    if(offset){
+      var ov = (o.weekOverrides||{})[weekKeyOf(offset, o)];
+      if(ov && ov[k] !== undefined) return ov[k];
+    }
+    return (o.grid||{})[k] || [];
+  }
   function settings(o){
     var s = o.settings || {};
     var d = {font:'微软雅黑', remind:false, remindMin:1, sound:true, dndStart:'', dndEnd:'', remindOnce:true, timeHint:''};
@@ -178,8 +205,10 @@
     var s = settings(o);
     var P = o.periods||8;
     var html = '', any = false;
+    // v1.2.0 M3：当天生效课表（含未来周 override）
+    var offToday = weekOffsetOfDate(new Date(), o);
     for(var p=0;p<P;p++){
-      var arr = o.grid[(dIdx)+'-'+p] || [];
+      var arr = cellFor(dIdx, p, offToday, o);
       if(!arr.length) continue;
       any = true;
       var t = o.times&&o.times[p]?o.times[p]:'';
@@ -236,6 +265,11 @@
   // 上课提醒（小组件内，复用节次缓存，30s 低频检查）
   function remindCheck(){
     if(!state) return;
+    // v1.2.0 M4：主程序在运行（心跳新鲜，90s 内）时由主程序负责提醒，widget 不再重复提醒，避免双重弹窗
+    try{
+      var beat = parseInt(localStorage.getItem('elec_schedule_beat_v1'),10)||0;
+      if(Date.now() - beat < 90000) return;
+    }catch(e){}
     var s = settings(state); if(!s.remind || inDnd(s)) return;
     var d=new Date(), dIdx=todayIdx(), nowMin=d.getHours()*60+d.getMinutes();
     if(!timesCache) timesCache = parseTimes(state);

@@ -1,12 +1,12 @@
-# Rust / Tauri 构建产物
+# Rust / Tauri 鏋勫缓浜х墿
 /src-tauri/target/
 target/
 
-# 构建输出与临时图
+# 鏋勫缓杈撳嚭涓庝复鏃跺浘
 dist/
 assets/.tmp_png/
 
-# 系统与编辑器
+# 绯荤粺涓庣紪杈戝櫒
 Thumbs.db
 Desktop.ini
 .DS_Store
@@ -14,6 +14,15 @@ Desktop.ini
 .vscode/
 *.swp
 
-# 临时
+# 涓存椂
 temp/
 *_tmp.js
+
+# 历史版本产物（不入库）
+课表应用_v1.1.2.exe
+课表应用_v1.1.2.zip
+课表应用_v1.1.2/
+课表应用_测试版_v1.1.0.exe
+课表应用_测试版_v1.1.1beta.rar
+课表应用_测试版_v1.1.1beta.zip
+课表应用_测试版_v1.1.1beta/
