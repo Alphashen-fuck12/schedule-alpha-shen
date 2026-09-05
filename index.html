@@ -438,6 +438,19 @@ body[data-mode="simple"] .week-bar .btn.add-week{border-style:dashed;color:var(-
   #homeToday .next-tip{margin-top:10px;padding:10px 12px;border-radius:12px;background:rgba(47,107,255,.08);color:#2f5bd0;font-size:14px}
 
   /* ============ 打印（干净版式） ============ */
+  /* v1.4.2：手机端窄屏适配（微信扫码打开时更清爽） */
+  @media (max-width:760px){
+    #sideNav{display:none}
+    #appShell{display:block;max-width:none;margin:0;padding:8px}
+    #mainCol{display:block;max-width:none}
+    #appMain{display:block}
+    header{padding:6px 8px}
+    header h1{font-size:17px}
+    #gridToolbar .tbtn{font-size:12px;padding:4px 7px}
+    #weekBar{flex-wrap:wrap}
+    #gridWrap{padding:6px;overflow-x:auto}
+    #grid{min-width:640px}
+  }
   @media print{
     #sideNav,#swapView,#printBtn,.modal-backdrop,.theme-bar,#bgLayer,#homeView{display:none !important}
     body{background:#fff !important;padding:0}
@@ -529,10 +542,12 @@ if (typeof Element !== 'undefined') {
 
     <div class="side-group">数据</div>
     <button class="side-item" data-act="excel"><span class="ico">▦</span>导出 Excel</button>
+    <button class="side-item" data-act="teacher"><span class="ico">♻</span>导出老师版</button>
     <button class="side-item" data-act="export"><span class="ico">⇪</span>导出备份</button>
     <button class="side-item" data-act="import"><span class="ico">⇩</span>导入备份</button>
     <button class="side-item" data-act="print"><span class="ico">⎙</span>打印课表</button>
     <button class="side-item" data-act="help"><span class="ico">?</span>帮助</button>
+<button class="side-item" data-act="remote"><span class="ico">◴</span>手机同步</button>
 
     <div class="side-foot">
       <button class="side-item" data-act="bless"><span class="ico">♡</span>每日祝福</button>
@@ -859,6 +874,14 @@ if (typeof Element !== 'undefined') {
       <input type="text" id="setTimeHint" placeholder="如：已按系统时间校准" style="flex:1;min-width:120px">
     </div>
     <p class="set-note">校时提示文字会显示在小组件上，表示课表跟随系统时间自动校准。</p>
+    <div class="set-row set-head">云端同步（手机扫码）</div>
+    <div class="set-row"><span>云端地址</span>
+      <input type="text" id="setCloudUrl" placeholder="https://xxx.workers.dev" style="flex:1;min-width:140px">
+    </div>
+    <div class="set-row"><span>写密钥</span>
+      <input type="text" id="setCloudWrite" placeholder="WRITE_TOKEN" style="flex:1;min-width:140px">
+    </div>
+    <p class="set-note">开启后：电脑上改课表会自动推送到云端，手机扫码即可实时查看；云端为 Cloudflare 免费托管，电脑关机也能用。</p>
     <div style="text-align:right;margin-top:10px">
       <button class="btn" id="btnSaveAppSettings">保存设置</button>
     </div>
@@ -882,6 +905,23 @@ if (typeof Element !== 'undefined') {
       <input type="file" id="importFile" accept=".json" style="display:none">
     </div>
     <p style="font-size:13px;color:var(--ink-soft);margin-top:8px">备份文件包含全部课表、主题与背景设置，换电脑时导入即可恢复。</p>
+  </div>
+</div>
+
+<!-- 手机互通 扫码同步 浮层 -->
+<div class="modal-backdrop" id="remoteBackdrop">
+  <div class="modal glass" style="position:relative;max-width:420px">
+    <button class="close-x" data-close="remoteBackdrop">×</button>
+    <h3>手机同步 · 微信扫码</h3>
+    <p style="font-size:13px;color:var(--ink-soft);margin:0 0 10px">手机微信「扫一扫」即可在手机上查看课表；数据托管在云端，电脑关机也能用，老师改课会自动同步到手机。</p>
+    <div style="text-align:center;margin:6px 0 10px">
+      <canvas id="remoteQr" width="0" height="0" style="background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.15);width:220px;height:220px"></canvas>
+    </div>
+    <p style="text-align:center;font-weight:bold;word-break:break-all" id="remoteUrl"></p>
+    <p style="font-size:13px;color:var(--ink-soft);text-align:center" id="remoteTip">正在获取本机局域网地址…</p>
+    <div style="text-align:right;margin-top:10px">
+      <button class="btn" data-close="remoteBackdrop">完成</button>
+    </div>
   </div>
 </div>
 
@@ -3680,6 +3720,50 @@ var GENERIC_BLESSINGS = [
 (function(){
   'use strict';
   var STORAGE_KEY = 'elec_schedule_full_v1';
+  // v1.4.2：手机互通（远程模式）——经 http://IP:端口 打开时为远程模式，数据走局域网服务器
+  var REMOTE_MODE = (function(){
+    try{ return !window.__TAURI__ && (location.protocol === 'http:' || location.protocol === 'https:'); }
+    catch(e){ return false; }
+  })();
+  function xhrGet(url){
+    var x = new XMLHttpRequest();
+    try{
+      x.open('GET', url, false); x.send();
+      return x.status === 200 ? x.responseText : '';
+    }catch(e){ return ''; }
+  }
+  function xhrPost(url, body){
+    var x = new XMLHttpRequest();
+    try{
+      x.open('POST', url, false); x.send(body);
+      return x.status === 200;
+    }catch(e){ return false; }
+  }
+  // v1.5.1：云端同步（Cloudflare Worker）——桌面端保存后自动推云端
+  function cloudUrlBase(){
+    var s = getSettings();
+    return s.cloudUrl ? String(s.cloudUrl).replace(/\/+$/,'') : '';
+  }
+  function cloudPush(payload){
+    var base = cloudUrlBase();
+    var s = getSettings();
+    if(!base || !s.cloudWriteToken) return;
+    try{
+      var x = new XMLHttpRequest();
+      x.open('POST', base + '/api/state', true);
+      x.setRequestHeader('Content-Type', 'text/plain');
+      x.setRequestHeader('X-Write-Token', s.cloudWriteToken);
+      x.send(payload);
+    }catch(e){}
+  }
+  function genCloudCode(n){
+    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    var s = '';
+    var a = new Uint8Array(n);
+    try{ crypto.getRandomValues(a); }catch(e){ for(var i=0;i<n;i++) a[i]=Math.floor(Math.random()*256); }
+    for(var i=0;i<n;i++) s += chars[a[i] % chars.length];
+    return s;
+  }
   var COURSES = ['语文','数学','英语','物理','化学','生物','道法','历史','地理','体育','音乐','美术','信息技术','自习','班会'];
   var GRADES  = ['初一','初二','初三','高一','高二','高三'];
   var WEEKDAYS = ['周一','周二','周三','周四','周五'];
@@ -3799,7 +3883,8 @@ var GENERIC_BLESSINGS = [
   }
   function load(){
     try{
-      var raw = localStorage.getItem(STORAGE_KEY);
+      // v1.4.2：远程模式（手机扫码打开）从局域网服务器读取共享课表
+      var raw = REMOTE_MODE ? xhrGet('/api/state') : localStorage.getItem(STORAGE_KEY);
       if(!raw) return null;
       var obj = JSON.parse(raw);
       // 默认字段补齐
@@ -3821,8 +3906,18 @@ var GENERIC_BLESSINGS = [
   }
   function save(){
     try{
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      var payload = JSON.stringify(state);
+      localStorage.setItem(STORAGE_KEY, payload);
       notifyChanged();
+      if(REMOTE_MODE){
+        // 手机端：保存到局域网服务器，桌面实时同步
+        xhrPost('/api/state', payload);
+      } else if(hasTauri()){
+        // 桌面端：双写一份到局域网共享文件，供手机扫码读取
+        try{ window.__TAURI__.core.invoke('remote_save_state', { stateJson: payload }); }catch(e){}
+      }
+      // v1.5.1：桌面端改课后自动推送到云端（Cloudflare Worker），手机扫码即可实时查看
+      if(!REMOTE_MODE) cloudPush(payload);
     }catch(e){
       alert('保存失败：存储空间不足，可能背景图片过大，请换小一点的图片。');
     }
@@ -4863,6 +4958,140 @@ var GENERIC_BLESSINGS = [
     }
     browserDownloadText(defaultName, html, 'application/vnd.ms-excel');
   }
+  // ---------- 导出老师版（v1.6.0：生成自包含单文件 HTML，课表数据内嵌、不联网，微信发给老师手机浏览器即可查看） ----------
+  function exportTeacher(){
+    // 剔除大体积 base64 背景图（老师手机端不需要），其余字段全量内嵌
+    var out = JSON.parse(JSON.stringify(state)); delete out.bg;
+    var data = JSON.stringify(out).replace(/<\//g, '<\\/');
+    var tName = (state.teacher || '').replace(/老师/g,'').trim();
+    var nm = tName.charAt(0) ? tName.charAt(0) + '老师' : '';
+    var tpl = `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>电子课表</title><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:#eef1ff;color:#333;min-height:100vh}
+.app{max-width:900px;margin:0 auto;padding:12px}
+header{background:linear-gradient(135deg,#eef1ff,#fdf2f8);border-radius:16px;padding:16px;text-align:center;box-shadow:0 2px 10px rgba(80,90,180,.08)}
+h1{font-size:20px;color:#3c4a8a;font-weight:700;margin-bottom:10px}
+.weekbar{display:flex;align-items:center;justify-content:center;gap:14px}
+.weekbar button{width:40px;height:40px;border:none;border-radius:50%;background:#fff;color:#3c4a8a;font-size:20px;box-shadow:0 1px 4px rgba(0,0,0,.08);cursor:pointer}
+.weekbar button:active{transform:scale(.94)}
+#weekLabel{font-size:17px;font-weight:700;color:#3c4a8a;min-width:76px}
+#todayBadge{font-size:12px;color:#999;margin-top:8px}
+#wrap{overflow-x:auto;margin-top:12px;background:#fff;border-radius:16px;box-shadow:0 2px 12px rgba(80,90,180,.10);padding:10px}
+table{width:100%;border-collapse:collapse;min-width:660px}
+th{background:#f4f6ff;color:#3c4a8a;font-weight:600;padding:10px 6px;border:1px solid #e3e6f5;font-size:14px}
+th small{display:block;font-weight:400;font-size:11px;color:#999;margin-top:2px}
+th.today{background:#fff3e0;color:#b26a00}
+td{border:1px solid #eef0fa;padding:6px;vertical-align:top;font-size:13px}
+td.pname{text-align:center;vertical-align:middle;background:#fafbff;color:#5a6aa8;font-weight:700;font-size:12px;min-width:86px;white-space:nowrap}
+td.pname small{display:block;font-weight:400;font-size:10px;color:#aaa;margin-top:2px}
+td.today{background:#fffaf0}
+td.cell-holiday{background:#fdecea}
+td.cell-adjust{background:#f4efff}
+.day-tag{font-weight:700;text-align:center;padding:4px;border-radius:8px;font-size:12px;margin-bottom:4px}
+.day-tag.holiday{background:#fdecea;color:#c0392b}
+.day-tag.adjust{background:#f4efff;color:#8e44ad}
+.entry{background:#f7f8ff;border-radius:10px;padding:6px 8px;margin-bottom:5px;border-left:3px solid #7c8ce0}
+.entry:last-child{margin-bottom:0}
+.entry .course{font-weight:700;color:#2c3a6b;font-size:13px}
+.entry .cls{display:block;font-size:11px;color:#777;margin-top:2px}
+.empty{color:#ccc;text-align:center;font-size:11px;padding:16px 0}
+footer{text-align:center;color:#bbb;font-size:11px;margin-top:14px}
+</style></head><body><div class="app">
+<header><h1 id="title">电子课表</h1><div class="weekbar"><button id="prevW">‹</button><span id="weekLabel">第1周</span><button id="nextW">›</button></div><div id="todayBadge"></div></header>
+<div id="wrap"><table id="grid"></table></div>
+<footer>由「电子记课表」导出 · 数据已内嵌，不联网也能看</footer>
+</div><script>
+var state = __DATA__;
+var WEEKDAYS = ["周一","周二","周三","周四","周五"];
+var cn = ["一","二","三","四","五","六","七","八","九","十","十一","十二","十三","十四","十五","十六","十七","十八","十九","二十"];
+var viewWeek = 0;
+function pad(n){return ('0'+n).slice(-2);}
+function dateToStr(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function mondayOf(d){var t=new Date(d);t.setHours(0,0,0,0);var w=(t.getDay()+6)%7;t.setDate(t.getDate()-w);return t;}
+function weekCount(){return Math.max(5,Math.min(20,(state.settings&&state.settings.weekCount)||5));}
+function weekKeyOf(offset){var base=state.week1?new Date(state.week1+'T00:00:00'):mondayOf(new Date());var m=mondayOf(base);m.setDate(m.getDate()+(offset||0)*7);return dateToStr(m);}
+function weekNumber(){if(!state||!state.week1)return 1;var t=new Date(state.week1+'T00:00:00');var n=new Date();n.setHours(0,0,0,0);var diff=Math.round((n-t)/86400000);if(diff<0)return 1;return Math.floor(diff/7)+1;}
+function weekLabel(offset){return '第'+(cn[offset]||(offset+1))+'周';}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function cellFor(d,p,offset){var k=d+'-'+p;if(offset){var ov=state.weekOverrides[weekKeyOf(offset)];if(ov&&ov[k]!==undefined)return ov[k];}return (state.grid&&state.grid[k])||[];}
+function clsLabel(c){c=String(c||'');return /班$/.test(c)?c:(c+'班');}
+function isHoliday(ds){return (state.holidays||[]).some(function(h){return h.start&&h.end&&ds>=h.start&&ds<=h.end;});}
+function adjustFromOf(ds){var a=(state.adjustDays||[]).filter(function(x){return x.from===ds;});return a.length?a[0].to:'';}
+function adjustToOf(ds){var a=(state.adjustDays||[]).filter(function(x){return x.to===ds;});return a.length?a[0].from:'';}
+function fmtDate(ds){if(!ds)return '';var t=new Date(ds+'T00:00:00');if(isNaN(t.getTime()))return ds;return (t.getMonth()+1)+'月'+t.getDate()+'日';}
+function currentWeekOffset(){var n=weekNumber();return (n-1)>=0&&(n-1)<=weekCount()-1?(n-1):0;}
+function render(){
+  var P=state.periods||8;
+  var base=weekKeyOf(viewWeek);
+  var now=new Date();now.setHours(0,0,0,0);
+  var curOff=currentWeekOffset();
+  var rows='<tr><th>节次</th>';
+  for(var d=0;d<5;d++){
+    var t=new Date(base+'T00:00:00');t.setDate(t.getDate()+d);
+    var isToday=(viewWeek===curOff)&&(t.getTime()===now.getTime());
+    rows+='<th'+(isToday?' class="today"':'')+'>'+WEEKDAYS[d]+'<small>'+(t.getMonth()+1)+'月'+t.getDate()+'日</small></th>';
+  }
+  rows+='</tr>';
+  for(var p=0;p<P;p++){
+    rows+='<tr>';
+    var tm=state.times&&state.times[p]?state.times[p]:'';
+    rows+='<td class="pname">第'+(p+1)+'节'+(tm?'<small>'+esc(tm)+'</small>':'')+'</td>';
+    for(var d=0;d<5;d++){
+      var t=new Date(base+'T00:00:00');t.setDate(t.getDate()+d);
+      var ds=dateToStr(t);
+      var hol=isHoliday(ds);
+      var adjF=adjustFromOf(ds);
+      var adjT=adjustToOf(ds);
+      var arr=[];
+      if(adjT){var fwd=(new Date(adjT+'T00:00:00').getDay()+6)%7;arr=arr.concat(cellFor(fwd,p,viewWeek));}
+      arr=arr.concat(cellFor(d,p,viewWeek));
+      var isToday=(viewWeek===curOff)&&(t.getTime()===now.getTime());
+      var cls='';
+      if(isToday)cls+=' today';
+      if(hol)cls+=' cell-holiday';
+      else if(adjF)cls+=' cell-adjust';
+      else if(adjT)cls+=' cell-adjust';
+      var tag='';
+      if(hol)tag='<div class="day-tag holiday">放假</div>';
+      else if(adjF)tag='<div class="day-tag adjust">调课至 '+fmtDate(adjF)+'</div>';
+      else if(adjT)tag='<div class="day-tag adjust">承接 '+fmtDate(adjT)+' 课程</div>';
+      rows+='<td class="'+cls.trim()+'">'+tag;
+      if(!arr.length){rows+='<div class="empty">空</div>';}
+      else{
+        arr.forEach(function(e){
+          var det=[];
+          if(e.grade)det.push(esc(e.grade));
+          if(e.cls)det.push(esc(clsLabel(e.cls)));
+          if(e.room)det.push(esc(e.room));
+          rows+='<div class="entry"><span class="course">'+esc(e.course||'')+'</span><span class="cls">'+det.join(' · ')+'</span></div>';
+        });
+      }
+      rows+='</td>';
+    }
+    rows+='</tr>';
+  }
+  document.getElementById('grid').innerHTML=rows;
+  document.getElementById('weekLabel').textContent=weekLabel(viewWeek);
+  var nm2='';var tn=(state.teacher||'').replace(/老师/g,'').trim();if(tn.charAt(0))nm2=tn.charAt(0)+'老师';
+  document.getElementById('title').textContent=(nm2?nm2+' · ':'')+'电子课表';
+  var badge=document.getElementById('todayBadge');
+  badge.textContent=(viewWeek===curOff)?'今天是第'+weekNumber()+'周':'当前查看：'+weekLabel(viewWeek)+' · 今天是第'+weekNumber()+'周';
+}
+document.getElementById('prevW').addEventListener('click',function(){if(viewWeek>0){viewWeek--;render();}});
+document.getElementById('nextW').addEventListener('click',function(){if(viewWeek<weekCount()-1){viewWeek++;render();}});
+viewWeek=currentWeekOffset();
+render();
+</script></body></html>`;
+    var html = tpl.split('__DATA__').join(data);
+    var defaultName = '课表老师版_' + (tName || '课表') + '.html';
+    if(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke){
+      tauriSaveText(defaultName, html, 'text/html').then(function(ok){
+        if(ok === false) browserDownloadText(defaultName, html, 'text/html');
+      });
+      return;
+    }
+    browserDownloadText(defaultName, html, 'text/html');
+  }
   function importBackup(file){
     if(!file) return;
     var reader = new FileReader();
@@ -5088,7 +5317,9 @@ var GENERIC_BLESSINGS = [
     return {
       font:'微软雅黑', mode:'', autoStart:false, widget:false,
       remind:false, remindMin:1, sound:true, dndStart:'', dndEnd:'',
-      remindOnce:true, timeHint:'', weekCount:5
+      remindOnce:true, timeHint:'', weekCount:5,
+      cloudUrl:'https://schedule-sync.3575250948.workers.dev',
+      cloudWriteToken:'z9iJSoVQAerPnA7QVK8HdiCiTW0iJboS'
     };
   }
   function getSettings(){
@@ -5151,6 +5382,8 @@ var GENERIC_BLESSINGS = [
     document.getElementById('setDndEnd').value = s.dndEnd || '';
     document.getElementById('setRemindOnce').checked = s.remindOnce !== false;
     document.getElementById('setTimeHint').value = s.timeHint || '';
+    document.getElementById('setCloudUrl').value = s.cloudUrl || '';
+    document.getElementById('setCloudWrite').value = s.cloudWriteToken || '';
     showModal('appSettingsBackdrop');
   }
   function saveAppSettings(){
@@ -5172,6 +5405,8 @@ var GENERIC_BLESSINGS = [
     s.dndEnd = document.getElementById('setDndEnd').value;
     s.remindOnce = document.getElementById('setRemindOnce').checked;
     s.timeHint = document.getElementById('setTimeHint').value.trim();
+    s.cloudUrl = document.getElementById('setCloudUrl').value.trim();
+    s.cloudWriteToken = document.getElementById('setCloudWrite').value.trim();
     state.settings = s;
     save();
     applyFont();
@@ -5339,7 +5574,7 @@ var GENERIC_BLESSINGS = [
   // 启动时：显示当前版本 + 检测已下载的新版本（二次登录提示：本次启动不打断，仅当暂存了新 exe 才提示）
   function initUpdate(){
     if(!hasTauri()){
-      showVersion('1.3.0'); // 浏览器版：写入静态版本号
+      showVersion('1.6.0'); // 浏览器版：写入静态版本号
       return;
     }
     window.__TAURI__.core.invoke('get_version').then(showVersion).catch(function(){});
@@ -5400,12 +5635,97 @@ var GENERIC_BLESSINGS = [
     else if(act==='bg') openBg();
     else if(act==='memo'){ document.getElementById('inpMemo').value = state.memo || ''; showModal('memoBackdrop'); }
     else if(act==='excel') exportCsv();
+    else if(act==='teacher') exportTeacher();
     else if(act==='export') exportBackup();
     else if(act==='import') document.getElementById('importFile').click();
     else if(act==='print') window.print();
     else if(act==='help') openHelp();
     else if(act==='bless') showBlessCard();
     else if(act==='mode') toggleMode();
+    else if(act==='remote') openRemotePanel();
+  }
+  // v1.5.1：云端同步——「手机同步」面板（Cloudflare 动态二维码，每次扫码用新授权码）
+  function openRemotePanel(){
+    showModal('remoteBackdrop');
+    var cv = document.getElementById('remoteQr');
+    var urlEl = document.getElementById('remoteUrl');
+    var tipEl = document.getElementById('remoteTip');
+    cv.width = 0; cv.height = 0;
+    if(!hasTauri()){
+      // 手机端自己打开面板时，直接显示当前访问地址
+      urlEl.textContent = location.origin + '/';
+      tipEl.textContent = '当前已是手机页面，可直接查看课表';
+      return;
+    }
+    var s = getSettings();
+    var base = cloudUrlBase();
+    if(!base || !s.cloudWriteToken){
+      urlEl.textContent = '';
+      tipEl.textContent = '尚未配置云端同步：请到「应用设置」里检查云端地址与写密钥（默认已填好，通常无需改）';
+      return;
+    }
+    urlEl.textContent = '正在生成云端同步二维码…';
+    tipEl.textContent = '二维码每次生成都不同，扫码后 7 天内有效，手机每 30 秒自动刷新';
+    // 先推一份当前课表到云端，保证手机首次打开就有数据
+    cloudPush(JSON.stringify(state));
+    // 生成一次性授权码并注册到云端（POST /api/auth）
+    var code = genCloudCode(12);
+    var x = new XMLHttpRequest();
+    x.open('POST', base + '/api/auth', true);
+    x.setRequestHeader('Content-Type', 'application/json');
+    x.setRequestHeader('X-Write-Token', s.cloudWriteToken);
+    x.onload = function(){
+      if(x.status === 200){
+        var url = base + '/?t=' + encodeURIComponent(code);
+        urlEl.textContent = url;
+        window.__TAURI__.core.invoke('get_cloud_qr', { url: url }).then(function(qr){
+          if(!qr || !qr.cells || !qr.size){ tipEl.textContent = '二维码生成失败，请重试'; return; }
+          drawQr(cv, qr);
+          tipEl.textContent = '手机微信「扫一扫」即可查看课表；老师改课自动同步，手机每 30 秒刷新一次';
+        }).catch(function(e){
+          tipEl.textContent = '二维码生成失败：' + (e || '网络异常');
+        });
+      } else {
+        urlEl.textContent = '';
+        tipEl.textContent = '授权码注册失败（状态 ' + x.status + '）：请检查云端地址与写密钥是否正确';
+      }
+    };
+    x.onerror = function(){
+      urlEl.textContent = '';
+      tipEl.textContent = '无法连接云端，请检查电脑网络';
+    };
+    x.send(JSON.stringify({ code: code }));
+  }
+  function drawQr(cv, qr){
+    if(!qr || !qr.cells || !qr.size) return;
+    var scale = 5, margin = 4, n = qr.size;
+    cv.width = (n + margin*2) * scale;
+    cv.height = cv.width;
+    var ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.fillStyle = '#000000';
+    for(var y=0;y<n;y++){
+      for(var x=0;x<n;x++){
+        if(qr.cells[y*n+x]) ctx.fillRect((x+margin)*scale,(y+margin)*scale,scale,scale);
+      }
+    }
+  }
+  // v1.4.2：手机端改课后，桌面主窗实时刷新
+  if(hasTauri() && window.__TAURI__.event && window.__TAURI__.event.listen){
+    window.__TAURI__.event.listen('schedule:remote-changed', function(){
+      window.__TAURI__.core.invoke('remote_load_state').then(function(raw){
+        if(!raw) return;
+        try{
+          var obj = JSON.parse(raw);
+          if(obj && obj.grid){
+            state = obj;
+            save();   // 回写本机 localStorage + 共享文件（幂等，不触发二次广播）
+            render();
+          }
+        }catch(e){}
+      }).catch(function(){});
+    });
   }
   [].forEach.call(document.querySelectorAll('#sideNav .side-item[data-act], #gridToolbar .tbtn[data-act]'), function(b){
     b.addEventListener('click', function(){ handleAct(this.getAttribute('data-act')); });
