@@ -33,3 +33,7 @@ temp/
 # 项目档案归档（不入库）
 _项目档案/
 releases/
+
+# Cloudflare Worker 密钥与本地缓存（不入库）
+cloud/.secrets.json
+cloud/.wrangler/

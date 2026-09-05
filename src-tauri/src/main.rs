@@ -390,6 +390,139 @@ fn save_text_file(default_name: String, content: String) -> Result<String, Strin
         .map_err(|_| "保存对话框异常".to_string())?
 }
 
+// ==================== 手机互通（局域网扫码同步） ====================
+// Rust 内嵌极简 HTTP 服务器：老师手机连同一 Wi-Fi/热点后，微信扫码打开
+// http://<电脑IP>:<端口>/ 即可查看/编辑同一份课表，免装 App、天然跨全平台。
+const REMOTE_PORT: u16 = 31881;
+
+fn remote_state_dir() -> PathBuf {
+    let base = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
+    base.join("schedule")
+}
+
+fn remote_sync_path() -> PathBuf {
+    remote_state_dir().join("sync_state.json")
+}
+
+/// 获取本机局域网 IPv4（UDP connect 技巧，不产生实际流量）
+#[tauri::command]
+fn get_lan_ip() -> Result<String, String> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
+    socket.connect("8.8.8.8:80").map_err(|e| e.to_string())?;
+    Ok(socket
+        .local_addr()
+        .map_err(|e| e.to_string())?
+        .ip()
+        .to_string())
+}
+
+/// 手机互通信息：访问地址 + 二维码矩阵（供前端 canvas 渲染）
+#[tauri::command]
+fn get_remote_info() -> Result<serde_json::Value, String> {
+    let ip = get_lan_ip()?;
+    let url = format!("http://{}:{}/", ip, REMOTE_PORT);
+    let code = qrcode::QrCode::new(url.as_bytes()).map_err(|e| e.to_string())?;
+    let size = code.width() as u32;
+    let cells: Vec<bool> = code.to_vec();
+    Ok(serde_json::json!({
+        "url": url,
+        "ip": ip,
+        "port": REMOTE_PORT,
+        "qr": { "size": size, "cells": cells }
+    }))
+}
+
+/// 云端同步：根据任意 URL 生成二维码矩阵（一维 cells，行优先），供前端 canvas 渲染
+#[tauri::command]
+fn get_cloud_qr(url: String) -> Result<serde_json::Value, String> {
+    let code = qrcode::QrCode::new(url.as_bytes()).map_err(|e| e.to_string())?;
+    let size = code.width() as u32;
+    let cells: Vec<bool> = code.to_vec();
+    Ok(serde_json::json!({
+        "size": size,
+        "cells": cells
+    }))
+}
+
+/// 桌面端双写：把本机课表同步一份到局域网共享文件
+#[tauri::command]
+fn remote_save_state(state_json: String) -> Result<(), String> {
+    let _ = std::fs::create_dir_all(remote_state_dir());
+    std::fs::write(remote_sync_path(), state_json.as_bytes()).map_err(|e| e.to_string())
+}
+
+/// 桌面端读回局域网共享文件（手机改过之后同步用）
+#[tauri::command]
+fn remote_load_state() -> Option<String> {
+    std::fs::read_to_string(remote_sync_path()).ok()
+}
+
+/// 启动局域网 HTTP 服务（后台线程，端口占用则静默失败、不影响主程序）
+fn start_remote_server(app: AppHandle) {
+    std::thread::spawn(move || {
+        let server = match tiny_http::Server::http(("0.0.0.0", REMOTE_PORT)) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[remote] 端口 {} 启动失败: {}", REMOTE_PORT, e);
+                return;
+            }
+        };
+        for request in server.incoming_requests() {
+            let app = app.clone();
+            std::thread::spawn(move || handle_remote_request(request, app));
+        }
+    });
+}
+
+fn handle_remote_request(mut request: tiny_http::Request, app: AppHandle) {
+    let url = request.url().to_string();
+    let method = request.method().clone();
+    let text_ct = "text/html; charset=utf-8".to_string();
+    let json_ct = "application/json; charset=utf-8".to_string();
+
+    let (body, ctype, code): (String, String, u16) = match (method, url.as_str()) {
+        (tiny_http::Method::Get, "/") | (tiny_http::Method::Get, "/index.html") => {
+            // 编译期内嵌一份前端，与 exe 内资源同源，保证桌面/手机行为一致
+            (include_str!("../frontend/index.html").to_string(), text_ct, 200)
+        }
+        (tiny_http::Method::Get, "/api/state") => {
+            let raw = std::fs::read_to_string(remote_sync_path())
+                .unwrap_or_else(|_| "{}".to_string());
+            (raw, json_ct, 200)
+        }
+        (tiny_http::Method::Post, "/api/state") => {
+            let mut body = String::new();
+            let _ = request.as_reader().read_to_string(&mut body);
+            let _ = std::fs::create_dir_all(remote_state_dir());
+            let save_ok = std::fs::write(remote_sync_path(), body.as_bytes()).is_ok();
+            if save_ok {
+                // 广播给桌面主窗，触发前端重新加载并渲染
+                let _ = app.emit("schedule:remote-changed", serde_json::json!({ "ts": 0 }));
+            }
+            if save_ok {
+                ("{\"ok\":true}".to_string(), json_ct, 200)
+            } else {
+                ("{\"ok\":false}".to_string(), json_ct, 500)
+            }
+        }
+        _ => ("404 Not Found".to_string(), text_ct, 404),
+    };
+
+    let mut response = tiny_http::Response::from_string(body)
+        .with_status_code(code)
+        .with_header(
+            tiny_http::Header::from_bytes(&b"Content-Type"[..], ctype.as_bytes())
+                .unwrap_or_else(|_| {
+                    tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"text/plain"[..]).unwrap()
+                }),
+        );
+    // 防缓存：手机端每次扫码打开都拿最新页面与数据
+    response.add_header(
+        tiny_http::Header::from_bytes(&b"Cache-Control"[..], &b"no-store"[..]).unwrap(),
+    );
+    let _ = request.respond(response);
+}
+
 fn main() {
     let widget_only = std::env::args().any(|a| a == "--widget");
 
@@ -407,12 +540,20 @@ fn main() {
             get_version,
             check_update,
             apply_update,
-            save_text_file
+            save_text_file,
+            get_lan_ip,
+            get_remote_info,
+            get_cloud_qr,
+            remote_save_state,
+            remote_load_state
         ])
         .setup(move |app| {
             // 后台静默检查更新（不阻塞启动，失败静默）
             let app_handle = app.handle().clone();
             std::thread::spawn(move || background_update_check(app_handle));
+
+            // 手机互通：启动局域网 HTTP 服务（后台线程）
+            start_remote_server(app.handle().clone());
 
             // 小组件窗口：仅当 --widget 自启模式 或 用户开启过小组件 时创建（默认关闭，省资源）
             if widget_only || load_widget_enabled() {

@@ -1,0 +1,14 @@
+# Cloudflare Worker 部署配置（周课表云端同步）
+# 使用方式：安装 wrangler 后在此目录执行  wrangler deploy
+
+name = "schedule-sync"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+# KV 命名空间（部署前需先在控制台创建，并把 ID 填到下面）
+[[kv_namespaces]]
+binding = "SCHEDULE_KV"
+id = "9ccb6b03a1d14855ad687e5c7acb0d46"
+
+# 环境变量：电脑端写密钥等，在控制台 Worker 设置里配置，或部署时用 --var
+# WRITE_TOKEN=xxxx   READ_TOKEN=xxxx   SESSION_DAYS=7   AUTH_MINUTES=30
