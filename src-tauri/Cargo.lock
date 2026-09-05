@@ -3318,7 +3318,7 @@ dependencies = [
 
 [[package]]
 name = "schedule"
-version = "1.6.0"
+version = "1.6.1"
 dependencies = [
  "dirs 6.0.0",
  "qrcode",

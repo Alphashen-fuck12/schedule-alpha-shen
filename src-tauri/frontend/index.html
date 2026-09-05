@@ -5574,7 +5574,7 @@ render();
   // 启动时：显示当前版本 + 检测已下载的新版本（二次登录提示：本次启动不打断，仅当暂存了新 exe 才提示）
   function initUpdate(){
     if(!hasTauri()){
-      showVersion('1.6.0'); // 浏览器版：写入静态版本号
+      showVersion('1.6.1'); // 浏览器版：写入静态版本号
       return;
     }
     window.__TAURI__.core.invoke('get_version').then(showVersion).catch(function(){});
