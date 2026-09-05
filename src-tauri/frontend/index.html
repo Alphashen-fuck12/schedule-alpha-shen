@@ -5410,6 +5410,10 @@ var GENERIC_BLESSINGS = [
   [].forEach.call(document.querySelectorAll('#sideNav .side-item[data-act], #gridToolbar .tbtn[data-act]'), function(b){
     b.addEventListener('click', function(){ handleAct(this.getAttribute('data-act')); });
   });
+  // v1.4.1 修复：侧边栏「首页 / 课表」切换按钮此前漏绑点击事件，导致首页打不开
+  [].forEach.call(document.querySelectorAll('#sideNav .side-item[data-view]'), function(b){
+    b.addEventListener('click', function(){ switchView(this.getAttribute('data-view')); });
+  });
   document.getElementById('btnSaveAppSettings').addEventListener('click', saveAppSettings);
   // 首页快捷入口
   document.getElementById('btnHomeBless').addEventListener('click', showBlessCard);
