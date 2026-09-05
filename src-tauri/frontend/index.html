@@ -265,7 +265,21 @@
   .more-menu button:hover{background:rgba(0,0,0,.06)}
   .week-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}
   .week-bar .btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .week-bar .btn.add-week{border-style:dashed;color:var(--accent)}
+  .week-bar .btn.add-week:hover{border-color:var(--accent);background:rgba(255,255,255,.6)}
   .week-bar-info{font-weight:600}
+  /* 换课后视觉加深：最近被调课的格子 */
+  #grid td.swap-hot{background:rgba(255,150,40,.14) !important;box-shadow:inset 0 0 0 2px rgba(255,140,30,.55)}
+  #grid td.swap-hot .entry{border-color:rgba(255,140,30,.45)}
+  /* 放假/调课标记格 */
+  #grid td.cell-holiday{background:repeating-linear-gradient(45deg,rgba(180,180,190,.14),rgba(180,180,190,.14) 8px,rgba(210,210,220,.14) 8px,rgba(210,210,220,.14) 16px) !important}
+  #grid td.cell-adjust{background:rgba(90,140,255,.10) !important}
+  #grid td .day-tag{display:block;font-size:12px;font-weight:700;padding:6px 8px;border-radius:8px;margin:2px 0 4px}
+  #grid td.cell-holiday .day-tag{color:#9a9aa6;background:rgba(255,255,255,.55)}
+  #grid td.cell-adjust .day-tag{color:#3a6fd8;background:rgba(120,160,255,.18)}
+  .adjust-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .adjust-row input[type=date]{flex:1;min-width:130px}
+  .adjust-tag{font-size:12px;color:var(--ink-soft)}
   #grid th.today{background:rgba(230,120,20,.14);color:#b45309}
   #grid td.today{background:linear-gradient(135deg,rgba(251,146,60,.14),rgba(251,113,133,.10));box-shadow:inset 0 0 0 2px rgba(217,119,6,.5)}
   #grid tr.now-row .period-col{color:var(--accent);font-weight:700}
@@ -579,10 +593,6 @@ if (typeof Element !== 'undefined') {
       <button class="tbtn" data-act="memo">✎ 备忘录</button>
     </div>
     <div class="week-bar" id="weekBar">
-      <button class="btn ghost small" data-wk="0">第一周</button>
-      <button class="btn ghost small" data-wk="1">第二周</button>
-      <button class="btn ghost small" data-wk="2">第三周</button>
-      <button class="btn ghost small" data-wk="3">第四周</button>
       <span class="week-bar-info" id="weekBarInfo" style="margin-left:auto;font-size:13px;color:var(--ink-soft)"></span>
     </div>
     <div id="gridContainer"></div>
@@ -625,6 +635,28 @@ if (typeof Element !== 'undefined') {
     <div class="swap-actions" style="margin-top:18px">
       <button class="btn" id="btnSwap">执行换课</button>
       <button class="btn ghost" id="btnUndo">撤销</button>
+    </div>
+    <div class="adjust-cols" style="margin-top:18px">
+      <div class="field full">
+        <label>放假日期段（该段内日期不上课，可添加多段）</label>
+        <div class="adjust-row">
+          <input type="date" id="holidayStart">
+          <span class="adjust-tag">至</span>
+          <input type="date" id="holidayEnd">
+          <button class="btn ghost small" id="btnAddHoliday">＋ 添加放假</button>
+        </div>
+        <div id="holidayList" class="hist-list" style="max-height:130px;margin-top:8px"></div>
+      </div>
+      <div class="field full" style="margin-top:14px">
+        <label>调课日（把某天课程调至另一天，当天不上课）</label>
+        <div class="adjust-row">
+          <input type="date" id="adjustFrom">
+          <span class="adjust-tag">调至</span>
+          <input type="date" id="adjustTo">
+          <button class="btn ghost small" id="btnAddAdjust">＋ 添加调课</button>
+        </div>
+        <div id="adjustList" class="hist-list" style="max-height:130px;margin-top:8px"></div>
+      </div>
     </div>
     <div class="hist-list">
       <h4>换课历史</h4>
@@ -3779,6 +3811,8 @@ var GENERIC_BLESSINGS = [
       if(!obj.customGrades) obj.customGrades = [];
       if(!obj.weekOverrides) obj.weekOverrides = {};
       if(!obj.settings) obj.settings = {};
+      if(!obj.holidays) obj.holidays = [];
+      if(!obj.adjustDays) obj.adjustDays = [];
       // v1.2.0：学期支持——旧数据迁移为默认学期
       migrateSemesters(obj);
       return obj;
@@ -3828,11 +3862,30 @@ var GENERIC_BLESSINGS = [
   }
   // ---------- 周视图机制 ----------
   var VIEWWEEK_KEY = 'elec_schedule_viewweek_v1';
-  var viewWeek = 0; // 0=本周(模板) 1=下周 2=下下周 3=下下下周
+  var viewWeek = 0; // 0=第一周(模板) 1=第二周 2=第三周 ...
+  var MAX_WEEKS = 20;
+  function weekCount(){
+    return Math.max(5, Math.min(MAX_WEEKS, getSettings().weekCount||5));
+  }
   function loadViewWeek(){
-    try{ var v = parseInt(localStorage.getItem(VIEWWEEK_KEY),10); return (v>=0&&v<=3)?v:0; }catch(e){ return 0; }
+    try{
+      var v = parseInt(localStorage.getItem(VIEWWEEK_KEY),10);
+      if(isNaN(v)) return 0;
+      return (v>=0 && v<=weekCount()-1) ? v : 0;
+    }catch(e){ return 0; }
   }
   function saveViewWeek(){ try{ localStorage.setItem(VIEWWEEK_KEY, String(viewWeek)); }catch(e){} }
+  function weekLabel(offset){
+    var cn = ['一','二','三','四','五','六','七','八','九','十','十一','十二','十三','十四','十五','十六','十七','十八','十九','二十'];
+    return '第' + (cn[offset]||(offset+1)) + '周';
+  }
+  // 添加一周（至少五周起步，上限 MAX_WEEKS）
+  function addWeek(){
+    if(weekCount() >= MAX_WEEKS){ alert('最多支持 ' + MAX_WEEKS + ' 周'); return; }
+    getSettings().weekCount = weekCount() + 1;
+    save();
+    render();
+  }
   // 指定周(offset 0-3)的周一日期字符串，基于 state.week1
   function weekKeyOf(offset){
     var base = state.week1 ? new Date(state.week1 + 'T00:00:00') : mondayOf(new Date());
@@ -4017,6 +4070,7 @@ var GENERIC_BLESSINGS = [
   // v1.3.1：跳转到调课面板（课表视图内），不再有独立换课页
   function showSwap(){
     switchView('grid');
+    renderHolidayList(); renderAdjustList();
     var sv = document.getElementById('swapView');
     if(sv && sv.scrollIntoView){ sv.scrollIntoView({behavior:'smooth', block:'start'}); }
   }
@@ -4026,12 +4080,16 @@ var GENERIC_BLESSINGS = [
     var base = state.week1 ? new Date(state.week1+'T00:00:00') : new Date();
     var m1 = mondayOf(base), m2 = mondayOf(dt);
     var diff = Math.round((m2 - m1)/86400000/7);
-    return (diff>=0 && diff<=3) ? diff : 0;
+    return (diff>=0 && diff<=weekCount()-1) ? diff : 0;
   }
   // 某日期（周一-周五）是否有课（v1.2.0 M1：按该日期对应周的生效课表判断，含 override）
   function dayHasClass(dt){
     var wd = (dt.getDay()+6)%7;
     if(wd<0||wd>4) return false;
+    // v1.4.0：放假当天无课；调课日当天课程已挪走
+    var ds = dateToStr(dt);
+    if(isHoliday(ds)) return false;
+    if(adjustFromOf(ds)) return false;
     var off = weekOffsetOfDate(dt);
     var P = state.periods || 8;
     for(var p=0;p<P;p++){
@@ -4046,7 +4104,7 @@ var GENERIC_BLESSINGS = [
     var base = state.week1 ? new Date(state.week1+'T00:00:00') : new Date();
     var m1 = mondayOf(base), m2 = mondayOf(t);
     var diff = Math.round((m2 - m1)/86400000/7);
-    if(diff>=0 && diff<=3){
+    if(diff>=0 && diff<=weekCount()-1){
       viewWeek = diff;
       saveViewWeek();
       render();
@@ -4056,7 +4114,7 @@ var GENERIC_BLESSINGS = [
       saveViewWeek();
       render();
       showGrid();
-      alert(diff>3 ? '该日期超出当前可预览的 3 周范围，已为你切换到本周课表。' : '该日期早于课表起始周，已为你切换到本周课表。');
+      alert(diff>weekCount()-1 ? '该日期超出当前可预览的周数范围，已为你切换到第一周课表。' : '该日期早于课表起始周，已为你切换到第一周课表。');
     }
   }
   function renderCal(){
@@ -4144,6 +4202,7 @@ var GENERIC_BLESSINGS = [
       teacher: state.teacher, week1: state.week1, periods: state.periods, classes: state.classes,
       grade: state.grade, times: deep(state.times||[]), rooms: deep(state.rooms||[]), grid: deep(state.grid),
       memo: state.memo||'', weekOverrides: deep(state.weekOverrides||{}),
+      holidays: deep(state.holidays||[]), adjustDays: deep(state.adjustDays||[]),
       customCourses: deep(state.customCourses||[]), customGrades: deep(state.customGrades||[]),
       customClasses: deep(state.customClasses||[]), settings: deep(state.settings||{})
     };
@@ -4189,6 +4248,8 @@ var GENERIC_BLESSINGS = [
     state.grid = deep(t.grid || {});
     state.memo = t.memo || '';
     state.weekOverrides = deep(t.weekOverrides || {});
+    state.holidays = deep(t.holidays || []);
+    state.adjustDays = deep(t.adjustDays || []);
     state.customCourses = deep(t.customCourses || state.customCourses || []);
     state.customGrades = deep(t.customGrades || state.customGrades || []);
     state.customClasses = deep(t.customClasses || state.customClasses || []);
@@ -4212,6 +4273,8 @@ var GENERIC_BLESSINGS = [
     state.grid = {};
     state.memo = '';
     state.weekOverrides = {};
+    state.holidays = [];
+    state.adjustDays = [];
     state.semesters[name] = currentSemesterSnapshot(); // v1.2.0 fix: 登记新学期，保证下拉立即可见可选
     save(); render();
     hideModal('setupBackdrop');
@@ -4254,15 +4317,30 @@ var GENERIC_BLESSINGS = [
     var mm = Math.floor(total/60), ss = total%60;
     return '下一节倒计时 ' + mm + ':' + ('0'+ss).slice(-2);
   }
-  // 周切换栏状态与信息
+  // 周切换栏：动态渲染周按钮（至少五周）+ 末尾加号“添加一周”
   function updateWeekBar(){
     var bar = document.getElementById('weekBar');
     if(!bar) return;
-    [].forEach.call(bar.querySelectorAll('.btn[data-wk]'), function(b){
-      b.classList.toggle('active', parseInt(b.getAttribute('data-wk'),10)===viewWeek);
-    });
+    if(viewWeek > weekCount()-1) viewWeek = weekCount()-1;
+    // 清理旧的周按钮与加号（保留 info 标签）
+    [].forEach.call(bar.querySelectorAll('.btn[data-wk], #btnAddWeek'), function(b){ b.remove(); });
     var info = document.getElementById('weekBarInfo');
-    var label = viewWeek===0 ? '第一周（默认课表）' : ('第 '+(weekNumber()+viewWeek)+' 周预览');
+    var frag = document.createDocumentFragment();
+    for(var i=0;i<weekCount();i++){
+      var b = document.createElement('button');
+      b.className = 'btn ghost small' + (i===viewWeek ? ' active' : '');
+      b.setAttribute('data-wk', String(i));
+      b.textContent = weekLabel(i);
+      frag.appendChild(b);
+    }
+    var add = document.createElement('button');
+    add.className = 'btn ghost small add-week';
+    add.id = 'btnAddWeek';
+    add.textContent = '＋';
+    add.title = '添加一周';
+    frag.appendChild(add);
+    bar.insertBefore(frag, info);
+    var label = viewWeek===0 ? '第一周（默认课表）' : (weekLabel(viewWeek)+'预览');
     var hasOv = false;
     if(viewWeek>0){
       var ov = state.weekOverrides[weekKeyOf(viewWeek)];
@@ -4373,12 +4451,34 @@ var GENERIC_BLESSINGS = [
       var t = state.times && state.times[p] ? state.times[p] : '';
       rows += '<td class="period-col">第 '+(p+1)+' 节'+(t?'<small>'+esc(t)+'</small>':'')+(isCur?'<small class="now-tag">● 现在</small>':'')+'</td>';
       for(var d=0;d<5;d++){
-        var arr = cellFor(d,p,viewWeek);
+        // v1.4.0：按该格实际日期判断放假/调课日
+        var dt0 = new Date(weekKeyOf(viewWeek)+'T00:00:00');
+        dt0.setDate(dt0.getDate()+d);
+        var ds = dateToStr(dt0);
         var isToday = dates[d].isToday;
-        var customNames = arr.filter(function(e){ return isCustomCourse(e.course); })
-                             .map(function(e){ return e.course; });
-        rows += '<td'+(isToday?' class="today"':'')+' data-key="'+key(d,p)+'"';
-        rows += '>';
+        var hol = isHoliday(ds);
+        var adjF = adjustFromOf(ds);
+        var adjT = adjustToOf(ds);
+        var hot = !!(swapHotKeys && swapHotKeys[key(d,p)]);
+        // 内容：调课目标日并入“被调来”的课程；放假/调出日不显示课程
+        var arr = [];
+        if(adjT){
+          var fwd = (new Date(adjT+'T00:00:00').getDay()+6)%7;
+          arr = arr.concat(cellFor(fwd,p,viewWeek));
+        }
+        arr = arr.concat(cellFor(d,p,viewWeek));
+        var tdCls = '';
+        if(isToday) tdCls += ' today';
+        if(hol) tdCls += ' cell-holiday';
+        else if(adjF) tdCls += ' cell-adjust';
+        else if(adjT) tdCls += ' cell-adjust';
+        if(hot) tdCls += ' swap-hot';
+        var tag = '';
+        if(hol) tag = '<div class="day-tag">放假</div>';
+        else if(adjF) tag = '<div class="day-tag">调课至 ' + fmtDate(adjF) + '</div>';
+        else if(adjT) tag = '<div class="day-tag">承接 ' + fmtDate(adjT) + ' 课程</div>';
+        rows += '<td class="'+tdCls.trim()+'" data-key="'+key(d,p)+'"' + (hol?' data-holiday="1"':'') + '>';
+        rows += tag;
         if(!arr.length){
           rows += '<div class="empty-hint">＋<br>点这里</div>';
         } else {
@@ -4400,6 +4500,7 @@ var GENERIC_BLESSINGS = [
     box.innerHTML = '<table id="grid">'+rows+'</table>';
     [].forEach.call(box.querySelectorAll('#grid td[data-key]'), function(td){
       td.addEventListener('click', function(){
+        if(this.dataset.holiday){ alert('该日期为放假，无需排课'); return; }
         openCell(parseInt(this.dataset.key.split('-')[0],10),
                  parseInt(this.dataset.key.split('-')[1],10));
       });
@@ -4437,6 +4538,85 @@ var GENERIC_BLESSINGS = [
     box.innerHTML = history.map(function(h){
       return '<div class="hist-item">'+esc(h.desc)+'</div>';
     }).join('');
+  }
+
+  // ---------- 放假 & 调课日管理（v1.4.0） ----------
+  var swapHotKeys = {}; // key -> true：最近一次换课/调课影响的格子，视觉加深
+  function fmtDate(ds){
+    if(!ds) return '';
+    var t = new Date(ds + 'T00:00:00');
+    if(isNaN(t.getTime())) return ds;
+    return (t.getMonth()+1)+'月'+t.getDate()+'日';
+  }
+  function isHoliday(ds){
+    return (state.holidays||[]).some(function(h){ return h.start && h.end && ds >= h.start && ds <= h.end; });
+  }
+  // 某天被调出课程 → 返回目标日；否则空串
+  function adjustFromOf(ds){
+    var a = (state.adjustDays||[]).filter(function(x){ return x.from===ds; });
+    return a.length ? a[0].to : '';
+  }
+  // 某天承接了哪一天的课程 → 返回来源日；否则空串
+  function adjustToOf(ds){
+    var a = (state.adjustDays||[]).filter(function(x){ return x.to===ds; });
+    return a.length ? a[0].from : '';
+  }
+  function renderHolidayList(){
+    var box = document.getElementById('holidayList');
+    if(!box) return;
+    var arr = state.holidays || [];
+    if(!arr.length){ box.innerHTML = '<div class="hist-empty">暂无放假安排</div>'; return; }
+    box.innerHTML = arr.map(function(h,i){
+      return '<div class="entry-edit-item"><div class="info"><b>🏖 '+fmtDate(h.start)+' ~ '+fmtDate(h.end)+'</b> 放假</div>'
+           + '<button class="del-btn" data-hol="'+i+'">删除</button></div>';
+    }).join('');
+    [].forEach.call(box.querySelectorAll('[data-hol]'), function(b){
+      b.addEventListener('click', function(){
+        state.holidays.splice(parseInt(this.dataset.hol,10),1);
+        save(); renderHolidayList(); renderGrid(); renderCal();
+      });
+    });
+  }
+  function renderAdjustList(){
+    var box = document.getElementById('adjustList');
+    if(!box) return;
+    var arr = state.adjustDays || [];
+    if(!arr.length){ box.innerHTML = '<div class="hist-empty">暂无调课日</div>'; return; }
+    box.innerHTML = arr.map(function(a,i){
+      return '<div class="entry-edit-item"><div class="info"><b>🔁 '+fmtDate(a.from)+'</b> 调至 <b>'+fmtDate(a.to)+'</b></div>'
+           + '<button class="del-btn" data-adj="'+i+'">删除</button></div>';
+    }).join('');
+    [].forEach.call(box.querySelectorAll('[data-adj]'), function(b){
+      b.addEventListener('click', function(){
+        state.adjustDays.splice(parseInt(this.dataset.adj,10),1);
+        save(); renderAdjustList(); renderGrid(); renderCal();
+      });
+    });
+  }
+  function addHoliday(){
+    var s = document.getElementById('holidayStart').value;
+    var e = document.getElementById('holidayEnd').value;
+    if(!s || !e){ alert('请选择放假起止日期'); return; }
+    if(s > e){ var t = s; s = e; e = t; }
+    if(!state.holidays) state.holidays = [];
+    if(state.holidays.some(function(h){ return h.start===s && h.end===e; })){ alert('该放假段已存在'); return; }
+    state.holidays.push({ start:s, end:e });
+    save(); renderHolidayList(); renderGrid(); renderCal();
+  }
+  function addAdjust(){
+    var f = document.getElementById('adjustFrom').value;
+    var t = document.getElementById('adjustTo').value;
+    if(!f || !t){ alert('请选择调课起止日期'); return; }
+    if(f === t){ alert('调课目标日不能与原日期相同'); return; }
+    if(!state.adjustDays) state.adjustDays = [];
+    if(state.adjustDays.some(function(a){ return a.from===f; })){ alert('该日期已有调课安排'); return; }
+    state.adjustDays.push({ from:f, to:t });
+    save(); renderAdjustList(); renderGrid(); renderCal();
+  }
+  function markSwapHot(srcKey, dstKey){
+    swapHotKeys = {};
+    if(srcKey) swapHotKeys[srcKey] = true;
+    if(dstKey) swapHotKeys[dstKey] = true;
   }
 
   // ---------- 首次引导 / 设置 ----------
@@ -4493,6 +4673,8 @@ var GENERIC_BLESSINGS = [
       grid: deep((state && state.grid) || {}),
       memo: (state && state.memo) || '',
       weekOverrides: deep((state && state.weekOverrides) || {}),
+      holidays: deep((state && state.holidays) || []),
+      adjustDays: deep((state && state.adjustDays) || []),
       customCourses: deep((state && state.customCourses) || []),
       customGrades: deep((state && state.customGrades) || []),
       customClasses: deep((state && state.customClasses) || []),
@@ -4523,6 +4705,8 @@ var GENERIC_BLESSINGS = [
       customGrades: (state && state.customGrades) || [],
       customClasses: (state && state.customClasses) || [],
       weekOverrides: isNewSem ? {} : ((state && state.weekOverrides) || {}),
+      holidays: (state && state.holidays) || [],
+      adjustDays: (state && state.adjustDays) || [],
       settings: (state && state.settings) || {},
       semester: semName,
       semesters: sems
@@ -4623,9 +4807,25 @@ var GENERIC_BLESSINGS = [
       rows += '<td style="border:1px solid #d9dcee;background:#fafbff;font-weight:600;text-align:center;padding:8px;vertical-align:middle">第 '+(p+1)+' 节' +
         (t?'<br><span style="font-weight:400;font-size:11px;color:#888">'+escH(t)+'</span>':'')+'</td>';
       for(var d=0;d<5;d++){
-        var arr = cellFor(d,p,viewWeek) || [];
+        // v1.4.0：按实际日期应用放假/调课
+        var dt0 = new Date(weekKeyOf(viewWeek)+'T00:00:00');
+        dt0.setDate(dt0.getDate()+d);
+        var ds = dateToStr(dt0);
+        var hol = isHoliday(ds);
+        var adjF = adjustFromOf(ds);
+        var adjT = adjustToOf(ds);
+        var arr = [];
+        if(adjT){
+          var fwd = (new Date(adjT+'T00:00:00').getDay()+6)%7;
+          arr = arr.concat(cellFor(fwd,p,viewWeek)||[]);
+        }
+        arr = arr.concat(cellFor(d,p,viewWeek)||[]);
         var inner = '';
-        if(arr.length){
+        if(hol){
+          inner = '<div style="font-weight:700;color:#c0392b;text-align:center">放假</div>';
+        } else if(adjF){
+          inner = '<div style="font-weight:700;color:#8e44ad;text-align:center">调课至 '+fmtDate(adjF)+'</div>';
+        } else if(arr.length){
           var blocks = [];
           arr.forEach(function(e){
             var det = [];
@@ -4644,7 +4844,7 @@ var GENERIC_BLESSINGS = [
       }
       rows += '</tr>';
     }
-    var title = escH((state.teacher? genericTeacherName() + ' · ' : '') + '第 '+(weekNumber()+viewWeek)+' 周课表');
+    var title = escH((state.teacher? genericTeacherName() + ' · ' : '') + weekLabel(viewWeek) + '课表');
     var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>课表</x:Name><x:WorksheetOptions><x:DoNotDisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>' +
       '<table style="border-collapse:collapse;font-family:Microsoft YaHei,Arial,sans-serif;width:100%">' +
       '<tr><td colspan="6" style="border:1px solid #c9cfe8;background:#f4f6ff;text-align:center;font-size:16px;font-weight:700;padding:10px;color:#333">'+title+'</td></tr>' +
@@ -4693,6 +4893,8 @@ var GENERIC_BLESSINGS = [
       if(!obj.customClasses) obj.customClasses = [];
       if(!obj.weekOverrides) obj.weekOverrides = {};
       if(!obj.settings) obj.settings = {};
+      if(!obj.holidays) obj.holidays = [];
+      if(!obj.adjustDays) obj.adjustDays = [];
       // v1.2.0 S6：导入后统一走学期迁移——旧版备份（无 semester/semesters）补默认学期；
       // semester 为空串或与 semesters 不匹配时校正到有效学期
       migrateSemesters(obj);
@@ -4743,7 +4945,7 @@ var GENERIC_BLESSINGS = [
         var i = parseInt(this.dataset.i,10);
         var cur = (cellFor(d,p,viewWeek)||[]).slice();
         var arr2 = cur.slice(0,i).concat(cur.slice(i+1));
-        setCell(d,p,arr2,viewWeek);
+        setCellSync(d,p,arr2);
         save(); renderEntryList(); renderGrid(); renderHeader();
       });
     });
@@ -4765,7 +4967,7 @@ var GENERIC_BLESSINGS = [
     // v1.2.0 修复：cellFor 在空格子（offset=0 且 state.grid[k] 不存在）时返回临时数组，push 不会写回；
     // 改为 concat + setCell 写回型写入，确保空白格首次添加也能持久化
     var arr = cellFor(d,p,viewWeek).concat([e]);
-    setCell(d,p,arr,viewWeek);
+    setCellSync(d,p,arr);
     save();
     document.getElementById('addRoom').value = '';
     document.getElementById('addNote').value = '';
@@ -4790,6 +4992,20 @@ var GENERIC_BLESSINGS = [
       else state.grid[key(d,p)] = arr;
     } else {
       setOverrideCell(d,p,arr,wk);
+    }
+  }
+  // v1.4.0：课程默认串联——任意周编辑都同步为全局默认课表（写模板 + 清除各周该格 override），
+  // 保证“不管在默认/第二/三周填课都同步所有课表”，未来周自动延续默认课表
+  function setCellSync(d,p,arr){
+    var k = key(d,p);
+    if(!arr || !arr.length) delete state.grid[k];
+    else state.grid[k] = arr;
+    for(var w=1;w<weekCount();w++){
+      var wk = weekKeyOf(w);
+      if(state.weekOverrides[wk] && state.weekOverrides[wk][k] !== undefined){
+        delete state.weekOverrides[wk][k];
+        if(!Object.keys(state.weekOverrides[wk]).length) delete state.weekOverrides[wk];
+      }
     }
   }
   function performSwap(){
@@ -4839,7 +5055,18 @@ var GENERIC_BLESSINGS = [
       setCell(sd,sp,[],wk);
     }
     history.push({ desc:desc, keys:touched, before:before, wk:wk });
+    // v1.4.0：受影响格子视觉加深标记
+    markSwapHot(touched[0], touched.length>1 ? touched[1] : null);
     save(); render();
+    // v1.4.0：换课“是否沿用”提示——仅预览周（viewWeek>0）时询问是否同步到默认课表
+    if(viewWeek>0 && confirm('本次换课只影响「'+weekLabel(viewWeek)+'」（预览周）。\n是否同步到默认课表，让其余各周也自动沿用本次调整？')){
+      touched.forEach(function(k){
+        var kk = k.split('-');
+        var d = parseInt(kk[0],10), p = parseInt(kk[1],10);
+        setCellSync(d,p,cellFor(d,p,wk));
+      });
+      save(); render();
+    }
   }
   function undoSwap(){
     if(!history.length){ alert('没有可撤销的操作'); return; }
@@ -4850,6 +5077,7 @@ var GENERIC_BLESSINGS = [
       if(h.before[k] && h.before[k].length) setCell(d,p,JSON.parse(JSON.stringify(h.before[k])),h.wk);
       else setCell(d,p,[],h.wk);
     });
+    swapHotKeys = {};
     save(); render();
   }
 
@@ -4859,7 +5087,7 @@ var GENERIC_BLESSINGS = [
     return {
       font:'微软雅黑', mode:'', autoStart:false, widget:false,
       remind:false, remindMin:1, sound:true, dndStart:'', dndEnd:'',
-      remindOnce:true, timeHint:''
+      remindOnce:true, timeHint:'', weekCount:5
     };
   }
   function getSettings(){
@@ -5132,7 +5360,7 @@ var GENERIC_BLESSINGS = [
     viewWeek = loadViewWeek();
     initUpdate();
     if(!state){
-      state = { grid:{}, memo:'', teacher:'', week1:'', periods:8, classes:3, grade:GRADES[0], times:[], rooms:[], theme:'dawn', bg:null, bgBlur:8, customCourses:[], customGrades:[], customClasses:[], weekOverrides:{}, settings:{} };
+      state = { grid:{}, memo:'', teacher:'', week1:'', periods:8, classes:3, grade:GRADES[0], times:[], rooms:[], theme:'dawn', bg:null, bgBlur:8, customCourses:[], customGrades:[], customClasses:[], weekOverrides:{}, holidays:[], adjustDays:[], settings:{} };
       render();
       openSetup(true);
       return;
@@ -5204,6 +5432,9 @@ var GENERIC_BLESSINGS = [
   document.getElementById('btnAddEntry').addEventListener('click', addEntry);
   document.getElementById('btnSwap').addEventListener('click', performSwap);
   document.getElementById('btnUndo').addEventListener('click', undoSwap);
+  // v1.4.0：放假段 & 调课日
+  document.getElementById('btnAddHoliday').addEventListener('click', addHoliday);
+  document.getElementById('btnAddAdjust').addEventListener('click', addAdjust);
   document.getElementById('btnBlessNext').addEventListener('click', function(){
     var b = pickBlessing();
     document.getElementById('blessTitle').textContent = b.title;
@@ -5239,8 +5470,11 @@ var GENERIC_BLESSINGS = [
     document.getElementById('updateBar').style.display = 'none';
   });
   document.getElementById('weekBar').addEventListener('click', function(e){
+    var add = e.target.closest('#btnAddWeek');
+    if(add){ addWeek(); return; }
     var b = e.target.closest('.btn[data-wk]');
     if(!b) return;
+    swapHotKeys = {};
     viewWeek = parseInt(b.getAttribute('data-wk'),10);
     saveViewWeek();
     render();
