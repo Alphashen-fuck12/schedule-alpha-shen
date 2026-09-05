@@ -5081,7 +5081,7 @@ document.getElementById('prevW').addEventListener('click',function(){if(viewWeek
 document.getElementById('nextW').addEventListener('click',function(){if(viewWeek<weekCount()-1){viewWeek++;render();}});
 viewWeek=currentWeekOffset();
 render();
-</script></body></html>`;
+<\/script></body></html>`;
     var html = tpl.split('__DATA__').join(data);
     var defaultName = '课表老师版_' + (tName || '课表') + '.html';
     if(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke){
