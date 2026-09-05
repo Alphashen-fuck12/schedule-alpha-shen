@@ -1,6 +1,6 @@
 [package]
 name = "schedule"
-version = "1.6.1"
+version = "1.6.2"
 description = "璇捐〃搴旂敤"
 edition = "2021"
 
@@ -19,6 +19,7 @@ dirs = "6"
 rfd = "0.15"
 tiny_http = "0.12"
 qrcode = "0.14"
+base64 = "0.22"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }

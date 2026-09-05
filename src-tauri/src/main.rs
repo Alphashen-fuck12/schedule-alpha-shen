@@ -390,6 +390,30 @@ fn save_text_file(default_name: String, content: String) -> Result<String, Strin
         .map_err(|_| "保存对话框异常".to_string())?
 }
 
+/// v1.6.2：PNG 等二进制文件导出——base64 解码后走原生保存对话框写入
+/// 返回：保存成功的绝对路径 / "__cancel__"（用户取消）/ 错误信息
+#[tauri::command]
+fn save_binary_file(default_name: String, base64_data: String) -> Result<String, String> {
+    use base64::engine::general_purpose::STANDARD as B64;
+    use base64::Engine;
+    let bytes = B64.decode(base64_data.trim()).map_err(|e| e.to_string())?;
+    let handle = std::thread::spawn(move || {
+        let path = rfd::FileDialog::new()
+            .set_file_name(&default_name)
+            .add_filter("PNG 图片", &["png"])
+            .save_file();
+        match path {
+            Some(p) => std::fs::write(&p, &bytes)
+                .map(|_| p.to_string_lossy().to_string())
+                .map_err(|e| e.to_string()),
+            None => Ok("__cancel__".to_string()),
+        }
+    });
+    handle
+        .join()
+        .map_err(|_| "保存对话框异常".to_string())?
+}
+
 // ==================== 手机互通（局域网扫码同步） ====================
 // Rust 内嵌极简 HTTP 服务器：老师手机连同一 Wi-Fi/热点后，微信扫码打开
 // http://<电脑IP>:<端口>/ 即可查看/编辑同一份课表，免装 App、天然跨全平台。
@@ -541,6 +565,7 @@ fn main() {
             check_update,
             apply_update,
             save_text_file,
+            save_binary_file,
             get_lan_ip,
             get_remote_info,
             get_cloud_qr,

@@ -453,6 +453,7 @@ body[data-mode="simple"] .week-bar .btn.add-week{border-style:dashed;color:var(-
   }
   @media print{
     #sideNav,#swapView,#printBtn,.modal-backdrop,.theme-bar,#bgLayer,#homeView{display:none !important}
+    #gridView{display:block !important}
     body{background:#fff !important;padding:0}
     #mainCol{display:block !important;max-width:none}
     #appShell{display:block !important;max-width:none}
@@ -921,6 +922,25 @@ if (typeof Element !== 'undefined') {
     <p style="font-size:13px;color:var(--ink-soft);text-align:center" id="remoteTip">正在获取本机局域网地址…</p>
     <div style="text-align:right;margin-top:10px">
       <button class="btn" data-close="remoteBackdrop">完成</button>
+    </div>
+  </div>
+</div>
+
+<!-- 导出老师版 选择浮层（v1.6.2：HTML 交互版 / PNG 静态图片版） -->
+<div class="modal-backdrop" id="exportBackdrop">
+  <div class="modal glass" style="position:relative;max-width:560px">
+    <button class="close-x" data-close="exportBackdrop">×</button>
+    <h3>导出老师版</h3>
+    <p style="font-size:13px;color:var(--ink-soft);margin:0 0 6px">给老师看课表，选一个格式，微信直发都行：</p>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:14px">
+      <button class="btn opt-card" data-act="teacheropt-html" style="flex:1;min-width:200px;height:auto;padding:16px;text-align:left">
+        <div style="font-size:17px;font-weight:800;margin-bottom:6px">网页版（可交互）</div>
+        <div style="font-size:12px;color:var(--ink-soft);line-height:1.6">单文件 HTML，手机浏览器打开，可切换周次、查看调课与假期标注。</div>
+      </button>
+      <button class="btn ghost opt-card" data-act="teacheropt-png" style="flex:1;min-width:200px;height:auto;padding:16px;text-align:left">
+        <div style="font-size:17px;font-weight:800;margin-bottom:6px">图片版（纯 PNG）</div>
+        <div style="font-size:12px;color:var(--ink-soft);line-height:1.6">静态课表图片，适合直接发图、转发群聊、打印，内容固定不可点。</div>
+      </button>
     </div>
   </div>
 </div>
@@ -5092,6 +5112,123 @@ render();
     }
     browserDownloadText(defaultName, html, 'text/html');
   }
+  // v1.6.2：导出老师版 PNG（静态图片）——canvas 手绘当前周课表，桌面版走 Rust 二进制保存，浏览器版直接下载
+  function exportTeacherPng(){
+    var url = renderSchedulePng();
+    var base64 = url.split(',')[1];
+    var tName = (state.teacher || '').replace(/老师/g,'').trim();
+    var defaultName = '课表老师版_' + (tName || '课表') + '.png';
+    if(hasTauri()){
+      window.__TAURI__.core.invoke('save_binary_file', { defaultName: defaultName, base64Data: base64 })
+        .then(function(r){
+          if(r === '__cancel__') return;
+          if(typeof r === 'string' && r.length > 0) alert('已保存 PNG：' + r);
+        })
+        .catch(function(){ browserDownloadPng(defaultName, base64); });
+      return;
+    }
+    browserDownloadPng(defaultName, base64);
+  }
+  function browserDownloadPng(name, base64){
+    var bstr = atob(base64), n = bstr.length, u8 = new Uint8Array(n);
+    for(var i=0;i<n;i++) u8[i] = bstr.charCodeAt(i);
+    var blob = new Blob([u8], {type:'image/png'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 1500);
+  }
+  // canvas 绘制课表（与 renderGrid 同一套数据逻辑：周切换/调课/放假/今天高亮）
+  function renderSchedulePng(){
+    var P = state.periods || 8;
+    var dates = weekDayDates(viewWeek);
+    var curP = (viewWeek===0) ? currentPeriodIdx() : -1;
+    var W = 720, TITLE_H = 66, HEAD_H = 48, ROW_H = 78;
+    var col0 = 104, colW = Math.floor((W - col0) / 5);
+    var H = TITLE_H + HEAD_H + P * ROW_H + 26;
+    var cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    var ctx = cv.getContext('2d');
+    var fnt = '"Microsoft YaHei","PingFang SC",sans-serif';
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,W,H);
+    // 标题
+    var tName = (state.teacher||'').replace(/老师/g,'').trim();
+    var nm = tName.charAt(0) ? tName.charAt(0)+'老师' : '';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#3c4a8a'; ctx.font = 'bold 22px '+fnt;
+    ctx.fillText((nm?nm+' · ':'') + weekLabel(viewWeek) + '课表', W/2, 40);
+    ctx.fillStyle = '#999'; ctx.font = '12px '+fnt;
+    ctx.fillText((viewWeek===0 ? '默认课表' : weekLabel(viewWeek)) + ' · 由「电子记课表」导出', W/2, 60);
+    // 表头
+    var y = TITLE_H;
+    var x = 0;
+    ctx.fillStyle = '#f4f6ff'; ctx.fillRect(x, y, col0, HEAD_H);
+    ctx.strokeStyle = '#c9cfe8'; ctx.strokeRect(x, y, col0, HEAD_H);
+    ctx.fillStyle = '#3c4a8a'; ctx.font = 'bold 14px '+fnt; ctx.textAlign = 'center';
+    ctx.fillText('节次', x+col0/2, y+HEAD_H/2+5);
+    for(var d=0;d<5;d++){
+      var dh = dates[d];
+      var cx = x+col0+d*colW;
+      ctx.fillStyle = dh.isToday ? '#fff3e0' : '#f4f6ff'; ctx.fillRect(cx, y, colW, HEAD_H);
+      ctx.strokeStyle = '#c9cfe8'; ctx.strokeRect(cx, y, colW, HEAD_H);
+      ctx.fillStyle = dh.isToday ? '#b26a00' : '#3c4a8a'; ctx.font = 'bold 14px '+fnt; ctx.textAlign = 'center';
+      ctx.fillText(WEEKDAYS[d], cx+colW/2, y+HEAD_H/2-2);
+      ctx.fillStyle = '#999'; ctx.font = '11px '+fnt;
+      ctx.fillText(dh.m+'月'+dh.dd+'日', cx+colW/2, y+HEAD_H/2+15);
+    }
+    y += HEAD_H;
+    // 数据行
+    for(var p=0;p<P;p++){
+      var tm = state.times && state.times[p] ? state.times[p] : '';
+      var isCur = (p===curP);
+      // 节次列
+      ctx.fillStyle = isCur ? '#f0f3ff' : '#fafbff'; ctx.fillRect(x, y, col0, ROW_H);
+      ctx.strokeStyle = '#c9cfe8'; ctx.strokeRect(x, y, col0, ROW_H);
+      ctx.fillStyle = '#5a6aa8'; ctx.font = 'bold 13px '+fnt; ctx.textAlign = 'center';
+      ctx.fillText('第 '+(p+1)+' 节', x+col0/2, y+ROW_H/2-4);
+      if(tm){ ctx.fillStyle = '#aaa'; ctx.font = '10px '+fnt; ctx.fillText(tm, x+col0/2, y+ROW_H/2+13); }
+      for(var d=0;d<5;d++){
+        var cx = x+col0+d*colW;
+        var dt0 = new Date(weekKeyOf(viewWeek)+'T00:00:00'); dt0.setDate(dt0.getDate()+d);
+        var ds = dateToStr(dt0);
+        var hol = isHoliday(ds), adjF = adjustFromOf(ds), adjT = adjustToOf(ds);
+        var arr = [];
+        if(adjT){ var fwd = (new Date(adjT+'T00:00:00').getDay()+6)%7; arr = arr.concat(cellFor(fwd,p,viewWeek)||[]); }
+        arr = arr.concat(cellFor(d,p,viewWeek)||[]);
+        var isToday = dates[d].isToday;
+        var bg = '#ffffff';
+        if(hol) bg = '#fdecea'; else if(adjF||adjT) bg = '#f4efff'; else if(isToday) bg = '#fffaf0';
+        ctx.fillStyle = bg; ctx.fillRect(cx, y, colW, ROW_H);
+        ctx.strokeStyle = '#c9cfe8'; ctx.strokeRect(cx, y, colW, ROW_H);
+        var ty = y + 20;
+        if(hol){ ctx.fillStyle = '#c0392b'; ctx.font = 'bold 12px '+fnt; ctx.textAlign = 'center'; ctx.fillText('放假', cx+colW/2, ty); }
+        else if(adjF){ ctx.fillStyle = '#8e44ad'; ctx.font = 'bold 11px '+fnt; ctx.textAlign = 'center'; ctx.fillText('调课至 '+fmtDate(adjF), cx+colW/2, ty); }
+        else if(adjT){ ctx.fillStyle = '#8e44ad'; ctx.font = 'bold 11px '+fnt; ctx.textAlign = 'center'; ctx.fillText('承接 '+fmtDate(adjT)+' 课程', cx+colW/2, ty); }
+        if(arr.length){
+          var cy = y + (hol||adjF||adjT ? 38 : 20);
+          for(var i=0;i<arr.length;i++){
+            if(cy > y+ROW_H-6) break;
+            var e = arr[i];
+            var dot = courseColor(e.course);
+            if(dot){ ctx.fillStyle = dot; ctx.beginPath(); ctx.arc(cx+13, cy-9, 4, 0, Math.PI*2); ctx.fill(); }
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#2c3a6b'; ctx.font = 'bold 13px '+fnt;
+            ctx.fillText(String(e.course==null?'':e.course), cx+24, cy);
+            var det = [];
+            if(e.grade) det.push(e.grade);
+            if(e.cls) det.push(clsLabel(e.cls));
+            if(e.room) det.push(e.room);
+            if(det.length){ ctx.fillStyle = '#777'; ctx.font = '11px '+fnt; ctx.fillText(det.join(' · '), cx+24, cy+15); }
+            cy += 34;
+          }
+        }
+      }
+      y += ROW_H;
+    }
+    ctx.strokeStyle = '#c9cfe8'; ctx.strokeRect(x, TITLE_H, W, HEAD_H+P*ROW_H);
+    return cv.toDataURL('image/png');
+  }
   function importBackup(file){
     if(!file) return;
     var reader = new FileReader();
@@ -5635,10 +5772,16 @@ render();
     else if(act==='bg') openBg();
     else if(act==='memo'){ document.getElementById('inpMemo').value = state.memo || ''; showModal('memoBackdrop'); }
     else if(act==='excel') exportCsv();
-    else if(act==='teacher') exportTeacher();
+    else if(act==='teacher') showModal('exportBackdrop');
+    else if(act==='teacheropt-html'){ hideModal('exportBackdrop'); exportTeacher(); }
+    else if(act==='teacheropt-png'){ hideModal('exportBackdrop'); exportTeacherPng(); }
     else if(act==='export') exportBackup();
     else if(act==='import') document.getElementById('importFile').click();
-    else if(act==='print') window.print();
+    else if(act==='print'){
+      // v1.6.2：修复打印空白——先切到课表视图确保 grid 已渲染，再触发打印
+      switchView('grid');
+      setTimeout(function(){ window.print(); }, 80);
+    }
     else if(act==='help') openHelp();
     else if(act==='bless') showBlessCard();
     else if(act==='mode') toggleMode();
@@ -5728,6 +5871,10 @@ render();
     });
   }
   [].forEach.call(document.querySelectorAll('#sideNav .side-item[data-act], #gridToolbar .tbtn[data-act]'), function(b){
+    b.addEventListener('click', function(){ handleAct(this.getAttribute('data-act')); });
+  });
+  // v1.6.2：导出老师版弹窗内的 HTML / PNG 选项
+  [].forEach.call(document.querySelectorAll('#exportBackdrop [data-act]'), function(b){
     b.addEventListener('click', function(){ handleAct(this.getAttribute('data-act')); });
   });
   // v1.4.1 修复：侧边栏「首页 / 课表」切换按钮此前漏绑点击事件，导致首页打不开
