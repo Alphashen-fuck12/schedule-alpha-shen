@@ -73,6 +73,9 @@
     padding:26px 32px 56px;
     font-size:16px;
   }
+  /* 应用外壳：左侧导航 + 右侧主列 */
+  #appShell{display:flex;gap:24px;align-items:flex-start;max-width:1680px;margin:0 auto}
+  #mainCol{flex:1 1 auto;min-width:0}
   /* 背景图图层 */
   #bgLayer{
     position:fixed;inset:0;z-index:-1;pointer-events:none;
@@ -187,7 +190,7 @@
   body[data-mode="simple"] .bg-panel{border-top-color:#ccc}
 
   /* ============ 主体布局 ============ */
-  #appMain{display:flex;gap:24px;align-items:flex-start}
+  #appMain{display:block}
   #gridWrap{flex:1 1 auto;min-width:0;padding:26px 30px}
   .card-head{display:flex;align-items:baseline;gap:14px;margin-bottom:18px;flex-wrap:wrap}
   .card-head h2{font-size:24px;font-weight:800}
@@ -281,9 +284,48 @@
   .remind-toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:200;background:rgba(239,68,68,.95);color:#fff;padding:12px 22px;border-radius:14px;font-size:15px;font-weight:600;box-shadow:0 10px 30px rgba(239,68,68,.4);animation:toastIn .3s ease-out}
   @keyframes toastIn{from{opacity:0;transform:translate(-50%,-12px)}to{opacity:1;transform:translate(-50%,0)}}
 
-  /* ============ 侧栏 ============ */
-  #swapPanel{width:330px;flex-shrink:0;padding:26px 26px}
-  #swapPanel h3{font-size:21px;font-weight:800;margin-bottom:18px}
+  /* ============ 侧边导航栏（v1.3.0 重构） ============ */
+  #sideNav{
+    width:232px;flex-shrink:0;padding:20px 14px;
+    position:sticky;top:26px;
+    display:flex;flex-direction:column;gap:2px;
+    max-height:calc(100vh - 52px);overflow:auto;
+  }
+  .side-brand{display:flex;align-items:center;gap:10px;padding:4px 8px 14px;border-bottom:1px dashed var(--line);margin-bottom:6px}
+  .side-logo{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;flex-shrink:0}
+  .side-title{font-weight:800;font-size:16px;line-height:1.3}
+  .side-ver{font-size:12px;color:var(--ink-soft)}
+  .side-group{font-size:12px;color:var(--ink-soft);font-weight:700;padding:10px 10px 4px;letter-spacing:2px}
+  .side-item{
+    display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+    border:none;background:none;cursor:pointer;font-family:inherit;font-size:15px;color:var(--ink);
+    padding:10px 12px;border-radius:12px;transition:background .15s,color .15s;
+  }
+  .side-item:hover{background:rgba(255,255,255,.55)}
+  .side-item.active{background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;font-weight:700}
+  .side-item .ico{width:20px;text-align:center;flex-shrink:0;font-size:15px;opacity:.75}
+  .side-item.active .ico{opacity:1}
+  .side-foot{margin-top:8px;padding-top:10px;border-top:1px dashed var(--line)}
+  .side-themes{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px 2px}
+  .side-themes .theme-btn{padding:6px 9px;font-size:13px}
+  .side-themes .theme-btn .dot{width:12px;height:12px}
+  /* 简洁模式 */
+  body[data-mode="simple"] #sideNav{background:#fff;border:1px solid #555;border-radius:4px;box-shadow:none}
+  body[data-mode="simple"] .side-item{color:#1a1a1a}
+  body[data-mode="simple"] .side-item.active{background:#1a1a1a;color:#fff;border-radius:4px}
+  body[data-mode="simple"] .side-item:hover{background:#f1f3f4}
+  body[data-mode="simple"] .side-group{color:#444}
+  body[data-mode="simple"] .side-brand{border-bottom-color:#555}
+  body[data-mode="simple"] .side-logo{border-radius:4px}
+  body[data-mode="simple"] .side-foot{border-top-color:#555}
+
+  /* ============ 智能换课视图（v1.3.0：由右侧栏升级为独立页） ============ */
+  #swapView{max-width:720px;margin:0 auto;padding:28px 34px}
+  #swapView h3{font-size:24px;font-weight:800;margin-bottom:20px}
+  #swapView .swap-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  #swapView .swap-grid .field{margin-bottom:0}
+  #swapView .swap-grid .field.full{grid-column:1/-1}
+  #swapView .hist-list{margin-top:22px;max-height:260px;overflow:auto}
   .field{margin-bottom:16px}
   .field label{display:block;font-size:15px;color:var(--ink-soft);margin-bottom:7px;font-weight:600}
   select,input[type=text],input[type=number],input[type=date],textarea{
@@ -370,8 +412,10 @@
 
   /* ============ 打印（干净版式） ============ */
   @media print{
-    header .actions,#swapPanel,#printBtn,.modal-backdrop,.theme-bar,#bgLayer,#homeView{display:none !important}
+    #sideNav,#swapView,#printBtn,.modal-backdrop,.theme-bar,#bgLayer,#homeView{display:none !important}
     body{background:#fff !important;padding:0}
+    #mainCol{display:block !important;max-width:none}
+    #appShell{display:block !important;max-width:none}
     header{box-shadow:none;border:none;padding:0 0 14px}
     header h1{font-size:24px}
     #weekBadge{margin-left:0;background:none;color:#333;box-shadow:none;padding:4px 0;font-size:16px}
@@ -442,45 +486,58 @@ if (typeof Element !== 'undefined') {
   </div>
 </div>
 
-<header class="glass">
-  <div>
-    <h1>电子记课表 <span class="ver-tag" id="appVersion"></span></h1>
-    <div class="sub" id="headerSub">每日祝福 · 让上课安排一目了然</div>
-    <div class="theme-bar">
-      <span class="theme-label">主题：</span>
-      <button class="theme-btn" data-theme="dawn"><span class="dot" style="background:linear-gradient(135deg,#eef1ff,#fdf2f8)"></span>晨雾</button>
-      <button class="theme-btn" data-theme="warm"><span class="dot" style="background:linear-gradient(135deg,#fff6e9,#ffeef1)"></span>暖阳</button>
-      <button class="theme-btn" data-theme="forest"><span class="dot" style="background:linear-gradient(135deg,#eafaf0,#e9f4ff)"></span>森语</button>
-      <button class="theme-btn" data-theme="dusk"><span class="dot" style="background:linear-gradient(135deg,#f3efff,#ffeefc)"></span>暮紫</button>
-      <button class="theme-btn" data-theme="blank"><span class="dot" style="background:#fff"></span>留白</button>
-    </div>
-  </div>
-  <div id="weekBadge"></div>
-  <div class="actions" style="display:flex;gap:10px;flex-wrap:wrap">
-    <button class="btn" id="btnViewToggle">课表视图</button>
-    <button class="btn ghost" id="btnSettings">课表设置</button>
-    <button class="btn ghost" id="btnMode">简洁模式</button>
-    <button class="btn" id="btnExcel">导出Excel</button>
-    <button class="btn ghost" id="btnExportTop">导出备份</button>
-    <button class="btn ghost" id="btnImportTop">导入备份</button>
-    <button class="btn" id="btnBless">祝福</button>
-    <span class="more-wrap">
-      <button class="btn" id="btnMore">更多 ▾</button>
-      <div class="more-menu" id="moreMenu">
-        <button data-act="manage">课程管理</button>
-        <button data-act="manageGrade">年级管理</button>
-        <button data-act="manageClass">班级管理</button>
-        <button data-act="bg">背景设置</button>
-        <button data-act="memo">备忘录</button>
-        <button data-act="print">打印课表</button>
-        <button data-act="help">帮助</button>
+<div id="appShell">
+  <!-- 侧边导航栏（v1.3.0：整合全部入口，替代原顶部杂牌按钮） -->
+  <aside id="sideNav" class="glass">
+    <div class="side-brand">
+      <div class="side-logo">课</div>
+      <div>
+        <div class="side-title">电子记课表</div>
+        <div class="side-ver" id="sideVersion"></div>
       </div>
-    </span>
-    <button class="btn ghost" id="btnAppSettings">设置</button>
-  </div>
-</header>
+    </div>
+    <div class="side-item active" data-view="home"><span class="ico">⌂</span>首页</div>
+    <div class="side-item" data-view="grid"><span class="ico">▦</span>课表</div>
+    <div class="side-item" data-view="swap"><span class="ico">⇄</span>智能换课</div>
 
-<main id="appMain">
+    <div class="side-group">工具</div>
+    <button class="side-item" data-act="setup"><span class="ico">▤</span>课表设置</button>
+    <button class="side-item" data-act="appsettings"><span class="ico">◎</span>应用设置</button>
+    <button class="side-item" data-act="courses"><span class="ico">▤</span>课程管理</button>
+    <button class="side-item" data-act="grades"><span class="ico">◈</span>年级管理</button>
+    <button class="side-item" data-act="classes"><span class="ico">▣</span>班级管理</button>
+    <button class="side-item" data-act="bg"><span class="ico">▧</span>背景设置</button>
+    <button class="side-item" data-act="memo"><span class="ico">✎</span>备忘录</button>
+
+    <div class="side-group">数据</div>
+    <button class="side-item" data-act="excel"><span class="ico">▦</span>导出 Excel</button>
+    <button class="side-item" data-act="export"><span class="ico">⇪</span>导出备份</button>
+    <button class="side-item" data-act="import"><span class="ico">⇩</span>导入备份</button>
+    <button class="side-item" data-act="print"><span class="ico">⎙</span>打印课表</button>
+    <button class="side-item" data-act="help"><span class="ico">?</span>帮助</button>
+
+    <div class="side-foot">
+      <button class="side-item" data-act="bless"><span class="ico">♡</span>每日祝福</button>
+      <button class="side-item" data-act="mode"><span class="ico">◐</span><span id="sideModeLabel">简洁模式</span></button>
+      <div class="side-themes">
+        <button class="theme-btn" data-theme="dawn"><span class="dot" style="background:linear-gradient(135deg,#eef1ff,#fdf2f8)"></span>晨雾</button>
+        <button class="theme-btn" data-theme="warm"><span class="dot" style="background:linear-gradient(135deg,#fff6e9,#ffeef1)"></span>暖阳</button>
+        <button class="theme-btn" data-theme="forest"><span class="dot" style="background:linear-gradient(135deg,#eafaf0,#e9f4ff)"></span>森语</button>
+        <button class="theme-btn" data-theme="dusk"><span class="dot" style="background:linear-gradient(135deg,#f3efff,#ffeefc)"></span>暮紫</button>
+        <button class="theme-btn" data-theme="blank"><span class="dot" style="background:#fff"></span>留白</button>
+      </div>
+    </div>
+  </aside>
+
+  <div id="mainCol">
+    <header class="glass">
+      <div>
+        <h1>电子记课表 <span class="ver-tag" id="appVersion"></span></h1>
+        <div class="sub" id="headerSub">每日祝福 · 让上课安排一目了然</div>
+      </div>
+      <div id="weekBadge"></div>
+    </header>
+    <main id="appMain">
   <!-- 首页视图（v1.2.0 新增）：日历 + 今日概览 + 快捷入口 -->
   <section id="homeView" class="glass" style="display:none">
     <div class="card-head">
@@ -498,17 +555,15 @@ if (typeof Element !== 'undefined') {
       </div>
     </div>
     <div class="home-actions">
-      <button class="btn" id="btnHomeBless">每日祝福</button>
-      <button class="btn ghost" id="btnHomeSwap">智能换课</button>
-      <button class="btn ghost" id="btnHomeMemo">备忘录</button>
-      <button class="btn ghost" id="btnHomeExport">导出备份</button>
+      <button class="btn" id="btnHomeSwap">智能换课</button>
+      <button class="btn ghost" id="btnHomeBless">每日祝福</button>
     </div>
   </section>
   <section id="gridView">
   <section id="gridWrap" class="glass">
     <div class="card-head">
       <h2 id="gridTitle">本周课表</h2>
-      <span class="hint" id="gridHint">点击任意格子添加 / 编辑课程 · 今天列已高亮 · 鼠标悬停看备注</span>
+      <span class="hint" id="gridHint">点击任意格子添加 / 编辑课程 · 今天列已高亮 · 换课请到「智能换课」</span>
     </div>
     <div class="week-bar" id="weekBar">
       <button class="btn ghost small" data-wk="0">本周</button>
@@ -520,38 +575,41 @@ if (typeof Element !== 'undefined') {
     <div id="gridContainer"></div>
   </section>
 
-  <aside id="swapPanel" class="glass">
+  <!-- 智能换课 独立视图（v1.3.0：由右侧栏升级为整页） -->
+  <section id="swapView" class="glass" style="display:none">
     <h3>智能换课</h3>
-    <div class="field">
-      <label>操作方式</label>
-      <select id="opType">
-        <option value="swap">对调（两格互换）</option>
-        <option value="move">移动（挪到另一格）</option>
-        <option value="change">改成（整格替换为课程）</option>
-        <option value="clear">清空（删除整格内容）</option>
-      </select>
+    <div class="swap-grid">
+      <div class="field full">
+        <label>操作方式</label>
+        <select id="opType">
+          <option value="swap">对调（两格互换）</option>
+          <option value="move">移动（挪到另一格）</option>
+          <option value="change">改成（整格替换为课程）</option>
+          <option value="clear">清空（删除整格内容）</option>
+        </select>
+      </div>
+      <div class="field full" id="courseField">
+        <label>课程（用于「改成」，可输入自定义）</label>
+        <input id="opCourse" list="courseList" placeholder="选择或输入自定义课程">
+      </div>
+      <div class="field">
+        <label>源位置（周几）</label>
+        <select id="srcDay"></select>
+      </div>
+      <div class="field">
+        <label>目标位置（周几）</label>
+        <select id="dstDay"></select>
+      </div>
+      <div class="field">
+        <label>源位置（第几节）</label>
+        <select id="srcPeriod"></select>
+      </div>
+      <div class="field">
+        <label>目标位置（第几节）</label>
+        <select id="dstPeriod"></select>
+      </div>
     </div>
-    <div class="field">
-      <label>源位置（周几）</label>
-      <select id="srcDay"></select>
-    </div>
-    <div class="field">
-      <label>源位置（第几节）</label>
-      <select id="srcPeriod"></select>
-    </div>
-    <div class="field">
-      <label>目标位置（周几）</label>
-      <select id="dstDay"></select>
-    </div>
-    <div class="field">
-      <label>目标位置（第几节）</label>
-      <select id="dstPeriod"></select>
-    </div>
-    <div class="field" id="courseField">
-      <label>课程（用于「改成」，可输入自定义）</label>
-      <input id="opCourse" list="courseList" placeholder="选择或输入自定义课程">
-    </div>
-    <div class="swap-actions">
+    <div class="swap-actions" style="margin-top:18px">
       <button class="btn" id="btnSwap">执行换课</button>
       <button class="btn ghost" id="btnUndo">撤销</button>
     </div>
@@ -559,9 +617,11 @@ if (typeof Element !== 'undefined') {
       <h4>换课历史</h4>
       <div id="histBox"><div class="hist-empty">暂无操作</div></div>
     </div>
-  </aside>
+  </section>
   </section>
 </main>
+</div>
+</div>
 
 <!-- 首次引导 / 设置 弹窗 -->
 <div class="modal-backdrop" id="setupBackdrop">
@@ -3920,25 +3980,29 @@ var GENERIC_BLESSINGS = [
   var VIEW_KEY = 'elec_schedule_view_v1'; // 'home' | 'grid'
   var CAL_MONTH = null; // null=当前月；否则为 Date(当月初)
   function viewMode(){
-    try{ return localStorage.getItem(VIEW_KEY)==='grid' ? 'grid' : 'home'; }
+    try{
+      var m = localStorage.getItem(VIEW_KEY);
+      return (m==='grid'||m==='swap') ? m : 'home';
+    }
     catch(e){ return 'home'; }
   }
   function saveViewMode(m){ try{ localStorage.setItem(VIEW_KEY, m); }catch(e){} }
   function homeVisible(){ var hv = document.getElementById('homeView'); return !!hv && hv.style.display!=='none'; }
-  function showHome(){
-    document.getElementById('homeView').style.display = '';
-    document.getElementById('gridView').style.display = 'none';
-    document.getElementById('btnViewToggle').textContent = '课表视图';
-    renderHome();
-    saveViewMode('home');
+  // v1.3.0：统一视图切换（home/grid/swap），同步侧边栏高亮
+  function switchView(name){
+    var views = { home:document.getElementById('homeView'), grid:document.getElementById('gridView'), swap:document.getElementById('swapView') };
+    for(var k in views){ if(views[k]) views[k].style.display = (k===name) ? '' : 'none'; }
+    [].forEach.call(document.querySelectorAll('#sideNav .side-item[data-view]'), function(b){
+      b.classList.toggle('active', b.getAttribute('data-view')===name);
+    });
+    if(name==='home') renderHome();
+    if(name==='swap') renderSwapOptions();
+    saveViewMode(name);
   }
-  function showGrid(){
-    document.getElementById('gridView').style.display = '';
-    document.getElementById('homeView').style.display = 'none';
-    document.getElementById('btnViewToggle').textContent = '首页';
-    saveViewMode('grid');
-  }
-  function applyViewMode(){ if(viewMode()==='home') showHome(); else showGrid(); }
+  function showHome(){ switchView('home'); }
+  function showGrid(){ switchView('grid'); }
+  function showSwap(){ switchView('swap'); }
+  function applyViewMode(){ switchView(viewMode()); }
   // v1.2.0 M1：某日期落在的预览周 offset（0-3）；超出预览范围按模板(0)处理
   function weekOffsetOfDate(dt){
     var base = state.week1 ? new Date(state.week1+'T00:00:00') : new Date();
@@ -4145,8 +4209,8 @@ var GENERIC_BLESSINGS = [
   function applyMode(){
     var m = loadMode();
     document.body.setAttribute('data-mode', m);
-    var btn = document.getElementById('btnMode');
-    if(btn) btn.textContent = (m==='simple') ? '玻璃模式' : '简洁模式';
+    var lbl = document.getElementById('sideModeLabel');
+    if(lbl) lbl.textContent = (m==='simple') ? '玻璃模式' : '简洁模式';
   }
   function toggleMode(){
     var m = loadMode()==='simple' ? 'glass' : 'simple';
@@ -5001,11 +5065,13 @@ var GENERIC_BLESSINGS = [
   function showVersion(v){
     var el = document.getElementById('appVersion');
     if(el && v) el.textContent = 'v' + v;
+    var se = document.getElementById('sideVersion');
+    if(se && v) se.textContent = 'v' + v;
   }
   // 启动时：显示当前版本 + 检测已下载的新版本（二次登录提示：本次启动不打断，仅当暂存了新 exe 才提示）
   function initUpdate(){
     if(!hasTauri()){
-      showVersion('1.2.0'); // 浏览器版：写入静态版本号
+      showVersion('1.3.0'); // 浏览器版：写入静态版本号
       return;
     }
     window.__TAURI__.core.invoke('get_version').then(showVersion).catch(function(){});
@@ -5040,7 +5106,6 @@ var GENERIC_BLESSINGS = [
   document.getElementById('btnSaveSetup').addEventListener('click', saveSetup);
   document.getElementById('btnSemCreate').addEventListener('click', createSemester);
   document.getElementById('semSelect').addEventListener('change', function(){ switchSemester(this.value); });
-  document.getElementById('btnSettings').addEventListener('click', function(){ openSetup(false); });
   document.getElementById('btnPickBg').addEventListener('click', function(){ document.getElementById('bgFile').click(); });
   document.getElementById('bgFile').addEventListener('change', function(){ pickBg(this.files[0]); });
   document.getElementById('btnRemoveBg').addEventListener('click', removeBg);
@@ -5056,49 +5121,33 @@ var GENERIC_BLESSINGS = [
       save(); applyTheme();
     });
   });
-  document.getElementById('btnMore').addEventListener('click', function(){
-    var m = document.getElementById('moreMenu');
-    m.classList.toggle('show');
+  // v1.3.0：侧边导航栏统一入口（替代原顶部杂牌按钮）
+  [].forEach.call(document.querySelectorAll('#sideNav .side-item[data-view]'), function(b){
+    b.addEventListener('click', function(){ switchView(this.getAttribute('data-view')); });
   });
-  document.addEventListener('click', function(e){
-    var m = document.getElementById('moreMenu');
-    if(m && m.classList.contains('show') && !e.target.closest('.more-wrap')){
-      m.classList.remove('show');
-    }
-  });
-  [].forEach.call(document.querySelectorAll('#moreMenu [data-act]'), function(b){
+  [].forEach.call(document.querySelectorAll('#sideNav .side-item[data-act]'), function(b){
     b.addEventListener('click', function(){
       var act = this.getAttribute('data-act');
-      document.getElementById('moreMenu').classList.remove('show');
-      if(act==='bg') openBg();
-      else if(act==='memo'){
-        document.getElementById('inpMemo').value = state.memo || '';
-        showModal('memoBackdrop');
-      }
+      if(act==='setup') openSetup(false);
+      else if(act==='appsettings') openAppSettings();
+      else if(act==='courses') openCourseManage();
+      else if(act==='grades') openGradeManage();
+      else if(act==='classes') openClassManage();
+      else if(act==='bg') openBg();
+      else if(act==='memo'){ document.getElementById('inpMemo').value = state.memo || ''; showModal('memoBackdrop'); }
+      else if(act==='excel') exportCsv();
+      else if(act==='export') exportBackup();
+      else if(act==='import') document.getElementById('importFile').click();
       else if(act==='print') window.print();
-      else if(act==='manage') openCourseManage();
-      else if(act==='manageGrade') openGradeManage();
-      else if(act==='manageClass') openClassManage();
       else if(act==='help') openHelp();
+      else if(act==='bless') showBlessCard();
+      else if(act==='mode') toggleMode();
     });
   });
-  document.getElementById('btnAppSettings').addEventListener('click', openAppSettings);
   document.getElementById('btnSaveAppSettings').addEventListener('click', saveAppSettings);
-  document.getElementById('btnMode').addEventListener('click', toggleMode);
-  document.getElementById('btnExcel').addEventListener('click', exportCsv);
-  // v1.2.0：首页视图切换 + 顶栏导出/导入前置按钮
-  document.getElementById('btnViewToggle').addEventListener('click', function(){
-    if(homeVisible()) showGrid(); else showHome();
-  });
-  document.getElementById('btnExportTop').addEventListener('click', exportBackup);
-  document.getElementById('btnImportTop').addEventListener('click', function(){ document.getElementById('importFile').click(); });
+  // 首页快捷入口
   document.getElementById('btnHomeBless').addEventListener('click', showBlessCard);
-  document.getElementById('btnHomeSwap').addEventListener('click', function(){ showGrid(); });
-  document.getElementById('btnHomeMemo').addEventListener('click', function(){
-    document.getElementById('inpMemo').value = state.memo || '';
-    showModal('memoBackdrop');
-  });
-  document.getElementById('btnHomeExport').addEventListener('click', exportBackup);
+  document.getElementById('btnHomeSwap').addEventListener('click', function(){ showSwap(); });
   document.getElementById('homeCal').addEventListener('click', function(e){
     var t = e.target;
     if(t.id==='calPrev'){ CAL_MONTH = new Date(CAL_MONTH ? CAL_MONTH.getFullYear() : new Date().getFullYear(), (CAL_MONTH ? CAL_MONTH.getMonth() : new Date().getMonth())-1, 1); renderCal(); return; }
@@ -5118,7 +5167,6 @@ var GENERIC_BLESSINGS = [
   document.getElementById('btnAddEntry').addEventListener('click', addEntry);
   document.getElementById('btnSwap').addEventListener('click', performSwap);
   document.getElementById('btnUndo').addEventListener('click', undoSwap);
-  document.getElementById('btnBless').addEventListener('click', showBlessCard);
   document.getElementById('btnBlessNext').addEventListener('click', function(){
     var b = pickBlessing();
     document.getElementById('blessTitle').textContent = b.title;
