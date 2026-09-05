@@ -319,13 +319,25 @@
   body[data-mode="simple"] .side-logo{border-radius:4px}
   body[data-mode="simple"] .side-foot{border-top-color:#555}
 
-  /* ============ 智能换课视图（v1.3.0：由右侧栏升级为独立页） ============ */
-  #swapView{max-width:720px;margin:0 auto;padding:28px 34px}
-  #swapView h3{font-size:24px;font-weight:800;margin-bottom:20px}
+  /* ============ 调课面板（v1.3.1：收回课表页内） ============ */
+  #swapView{margin:18px 0 0;padding:24px 28px}
+  #swapView h3{font-size:20px;font-weight:800;margin-bottom:16px}
   #swapView .swap-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   #swapView .swap-grid .field{margin-bottom:0}
   #swapView .swap-grid .field.full{grid-column:1/-1}
   #swapView .hist-list{margin-top:22px;max-height:260px;overflow:auto}
+
+  /* ============ 课表页工具栏（v1.3.1：工具类功能集成于此，侧边栏不再展开） ============ */
+  #gridToolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;
+    margin-bottom:14px;border:1px dashed var(--line);border-radius:14px;background:rgba(255,255,255,.4)}
+  #gridToolbar .toolbar-title{font-size:13px;font-weight:700;color:var(--ink-soft);margin-right:4px}
+  #gridToolbar .tbtn{border:1px solid var(--line);background:rgba(255,255,255,.75);color:var(--ink);
+    border-radius:10px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;
+    transition:all .15s}
+  #gridToolbar .tbtn:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
+  body[data-mode="simple"] #gridToolbar .tbtn{background:#333;border-color:#555;color:#ddd}
+  body[data-mode="simple"] #gridToolbar .tbtn:hover{border-color:#7aa2ff;color:#7aa2ff}
+  body[data-mode="simple"] #gridToolbar{border-color:#555;background:transparent}
   .field{margin-bottom:16px}
   .field label{display:block;font-size:15px;color:var(--ink-soft);margin-bottom:7px;font-weight:600}
   select,input[type=text],input[type=number],input[type=date],textarea{
@@ -498,16 +510,7 @@ if (typeof Element !== 'undefined') {
     </div>
     <div class="side-item active" data-view="home"><span class="ico">⌂</span>首页</div>
     <div class="side-item" data-view="grid"><span class="ico">▦</span>课表</div>
-    <div class="side-item" data-view="swap"><span class="ico">⇄</span>智能换课</div>
-
-    <div class="side-group">工具</div>
-    <button class="side-item" data-act="setup"><span class="ico">▤</span>课表设置</button>
-    <button class="side-item" data-act="appsettings"><span class="ico">◎</span>应用设置</button>
-    <button class="side-item" data-act="courses"><span class="ico">▤</span>课程管理</button>
-    <button class="side-item" data-act="grades"><span class="ico">◈</span>年级管理</button>
-    <button class="side-item" data-act="classes"><span class="ico">▣</span>班级管理</button>
-    <button class="side-item" data-act="bg"><span class="ico">▧</span>背景设置</button>
-    <button class="side-item" data-act="memo"><span class="ico">✎</span>备忘录</button>
+    <button class="side-item" data-act="gotoSwap"><span class="ico">⇄</span>智能换课</button>
 
     <div class="side-group">数据</div>
     <button class="side-item" data-act="excel"><span class="ico">▦</span>导出 Excel</button>
@@ -563,21 +566,31 @@ if (typeof Element !== 'undefined') {
   <section id="gridWrap" class="glass">
     <div class="card-head">
       <h2 id="gridTitle">本周课表</h2>
-      <span class="hint" id="gridHint">点击任意格子添加 / 编辑课程 · 今天列已高亮 · 换课请到「智能换课」</span>
+      <span class="hint" id="gridHint">点击任意格子添加 / 编辑课程 · 今天列已高亮 · 调课请在下方「调课」面板操作</span>
+    </div>
+    <div class="toolbar" id="gridToolbar">
+      <span class="toolbar-title">工具</span>
+      <button class="tbtn" data-act="setup">▤ 课表设置</button>
+      <button class="tbtn" data-act="appsettings">◎ 应用设置</button>
+      <button class="tbtn" data-act="courses">▤ 课程管理</button>
+      <button class="tbtn" data-act="grades">◈ 年级管理</button>
+      <button class="tbtn" data-act="classes">▣ 班级管理</button>
+      <button class="tbtn" data-act="bg">▧ 背景设置</button>
+      <button class="tbtn" data-act="memo">✎ 备忘录</button>
     </div>
     <div class="week-bar" id="weekBar">
-      <button class="btn ghost small" data-wk="0">本周</button>
-      <button class="btn ghost small" data-wk="1">下周</button>
-      <button class="btn ghost small" data-wk="2">下下周</button>
-      <button class="btn ghost small" data-wk="3">下下下周</button>
+      <button class="btn ghost small" data-wk="0">第一周</button>
+      <button class="btn ghost small" data-wk="1">第二周</button>
+      <button class="btn ghost small" data-wk="2">第三周</button>
+      <button class="btn ghost small" data-wk="3">第四周</button>
       <span class="week-bar-info" id="weekBarInfo" style="margin-left:auto;font-size:13px;color:var(--ink-soft)"></span>
     </div>
     <div id="gridContainer"></div>
   </section>
 
-  <!-- 智能换课 独立视图（v1.3.0：由右侧栏升级为整页） -->
-  <section id="swapView" class="glass" style="display:none">
-    <h3>智能换课</h3>
+  <!-- 调课面板（v1.3.1：由独立整页收回课表页内，含智能换课） -->
+  <section id="swapView" class="glass">
+    <h3>调课 · 智能换课</h3>
     <div class="swap-grid">
       <div class="field full">
         <label>操作方式</label>
@@ -3982,26 +3995,31 @@ var GENERIC_BLESSINGS = [
   function viewMode(){
     try{
       var m = localStorage.getItem(VIEW_KEY);
-      return (m==='grid'||m==='swap') ? m : 'home';
+      return (m==='grid') ? m : 'home';
     }
     catch(e){ return 'home'; }
   }
   function saveViewMode(m){ try{ localStorage.setItem(VIEW_KEY, m); }catch(e){} }
   function homeVisible(){ var hv = document.getElementById('homeView'); return !!hv && hv.style.display!=='none'; }
-  // v1.3.0：统一视图切换（home/grid/swap），同步侧边栏高亮
+  // v1.3.1：统一视图切换（home/grid，调课已收回课表页内），同步侧边栏高亮
   function switchView(name){
-    var views = { home:document.getElementById('homeView'), grid:document.getElementById('gridView'), swap:document.getElementById('swapView') };
+    var views = { home:document.getElementById('homeView'), grid:document.getElementById('gridView') };
     for(var k in views){ if(views[k]) views[k].style.display = (k===name) ? '' : 'none'; }
     [].forEach.call(document.querySelectorAll('#sideNav .side-item[data-view]'), function(b){
       b.classList.toggle('active', b.getAttribute('data-view')===name);
     });
     if(name==='home') renderHome();
-    if(name==='swap') renderSwapOptions();
+    if(name==='grid') renderSwapOptions();
     saveViewMode(name);
   }
   function showHome(){ switchView('home'); }
   function showGrid(){ switchView('grid'); }
-  function showSwap(){ switchView('swap'); }
+  // v1.3.1：跳转到调课面板（课表视图内），不再有独立换课页
+  function showSwap(){
+    switchView('grid');
+    var sv = document.getElementById('swapView');
+    if(sv && sv.scrollIntoView){ sv.scrollIntoView({behavior:'smooth', block:'start'}); }
+  }
   function applyViewMode(){ switchView(viewMode()); }
   // v1.2.0 M1：某日期落在的预览周 offset（0-3）；超出预览范围按模板(0)处理
   function weekOffsetOfDate(dt){
@@ -4244,7 +4262,7 @@ var GENERIC_BLESSINGS = [
       b.classList.toggle('active', parseInt(b.getAttribute('data-wk'),10)===viewWeek);
     });
     var info = document.getElementById('weekBarInfo');
-    var label = viewWeek===0 ? '本周（默认课表）' : ('第 '+(weekNumber()+viewWeek)+' 周预览');
+    var label = viewWeek===0 ? '第一周（默认课表）' : ('第 '+(weekNumber()+viewWeek)+' 周预览');
     var hasOv = false;
     if(viewWeek>0){
       var ov = state.weekOverrides[weekKeyOf(viewWeek)];
@@ -4585,43 +4603,64 @@ var GENERIC_BLESSINGS = [
     }
     browserDownloadText(defaultName, data, 'application/json');
   }
-  // ---------- 导出 Excel（CSV，UTF-8 带 BOM，Excel/WPS 可打开不乱码） ----------
-  function csvCell(s){
-    s = String(s==null?'':s);
-    if(/[",\r\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
-    return s;
-  }
+  // ---------- 导出 Excel（v1.3.1：按原课表矩阵样式——横向周一~周五、纵向节次，HTML-table .xls，Excel/WPS 可打开且带样式美化） ----------
   function exportCsv(){
-    var P = state.periods, lines = [];
-    lines.push(['周几','节次','时间','课程','年级','班级','门牌号','备注'].map(csvCell).join(','));
+    var P = state.periods;
+    var dates = weekDayDates(viewWeek);
+    function escH(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    var rows = '';
+    // 表头：节次 + 周一~周五（含日期，与原课表网格一致）
+    rows += '<tr>';
+    rows += '<th style="width:110px;background:#eef1ff;border:1px solid #c9cfe8;font-weight:700;text-align:center;padding:8px;white-space:nowrap">节次</th>';
+    for(var d=0;d<5;d++){
+      rows += '<th style="background:#eef1ff;border:1px solid #c9cfe8;font-weight:700;text-align:center;padding:8px;white-space:nowrap">' +
+        WEEKDAYS[d] + '<br><span style="font-weight:400;font-size:11px;color:#888">' + dates[d].m + '月' + dates[d].dd + '日</span></th>';
+    }
+    rows += '</tr>';
     for(var p=0;p<P;p++){
       var t = state.times && state.times[p] ? state.times[p] : '';
+      rows += '<tr>';
+      rows += '<td style="border:1px solid #d9dcee;background:#fafbff;font-weight:600;text-align:center;padding:8px;vertical-align:middle">第 '+(p+1)+' 节' +
+        (t?'<br><span style="font-weight:400;font-size:11px;color:#888">'+escH(t)+'</span>':'')+'</td>';
       for(var d=0;d<5;d++){
-        // v1.2.0 M2：导出当前查看周的生效课表（含该周 override），不再只读默认模板
         var arr = cellFor(d,p,viewWeek) || [];
-        if(!arr.length){
-          lines.push([WEEKDAYS[d], '第'+(p+1)+'节', t, '', '', '', '', ''].map(csvCell).join(','));
-        } else {
+        var inner = '';
+        if(arr.length){
+          var blocks = [];
           arr.forEach(function(e){
-            lines.push([WEEKDAYS[d], '第'+(p+1)+'节', t,
-              e.course||'', e.grade||'', (e.cls? clsLabel(e.cls):''), e.room||'', e.note||''
-            ].map(csvCell).join(','));
+            var det = [];
+            if(e.grade) det.push(escH(e.grade));
+            if(e.cls) det.push(escH(clsLabel(e.cls)));
+            if(e.room) det.push(escH(e.room));
+            if(e.note) det.push(escH(e.note));
+            blocks.push('<div style="font-weight:700;color:#333">'+escH(e.course||'')+'</div>' +
+                        (det.length?'<div style="font-size:11px;color:#777">'+det.join(' · ')+'</div>':''));
           });
+          inner = blocks.join('<hr style="border:none;border-top:1px dashed #cfd3ea;margin:4px 0">');
+        } else {
+          inner = '&nbsp;';
         }
+        rows += '<td style="border:1px solid #e3e5f2;padding:6px 8px;vertical-align:top;font-size:13px">'+inner+'</td>';
       }
+      rows += '</tr>';
     }
-    var csv = '\ufeff' + lines.join('\r\n'); // BOM 确保 Excel 识别 UTF-8
+    var title = escH((state.teacher? genericTeacherName() + ' · ' : '') + '第 '+(weekNumber()+viewWeek)+' 周课表');
+    var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>课表</x:Name><x:WorksheetOptions><x:DoNotDisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head><body>' +
+      '<table style="border-collapse:collapse;font-family:Microsoft YaHei,Arial,sans-serif;width:100%">' +
+      '<tr><td colspan="6" style="border:1px solid #c9cfe8;background:#f4f6ff;text-align:center;font-size:16px;font-weight:700;padding:10px;color:#333">'+title+'</td></tr>' +
+      rows +
+      '</table></body></html>';
     var d = new Date();
     var ds = d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
-    var defaultName = '课表_' + (state.teacher||'课表') + '_' + ds + '.csv';
-    // v1.2.0：Tauri（WebView2）下 a[download] 无反应，走 Rust 保存对话框
+    var defaultName = '课表_' + (state.teacher||'课表') + '_' + ds + '.xls';
+    // Tauri（WebView2）下 a[download] 无反应，走 Rust 保存对话框；浏览器版直接下载
     if(window.__TAURI__ && window.__TAURI__.core && window.__TAURI__.core.invoke){
-      tauriSaveText(defaultName, csv, 'text/csv').then(function(ok){
-        if(ok === false) browserDownloadText(defaultName, csv, 'text/csv;charset=utf-8;'); // 仅保存失败时回退；取消(__cancel__)不下载
+      tauriSaveText(defaultName, html, 'application/vnd.ms-excel').then(function(ok){
+        if(ok === false) browserDownloadText(defaultName, html, 'application/vnd.ms-excel'); // 仅保存失败时回退；取消(__cancel__)不下载
       });
       return;
     }
-    browserDownloadText(defaultName, csv, 'text/csv;charset=utf-8;');
+    browserDownloadText(defaultName, html, 'application/vnd.ms-excel');
   }
   function importBackup(file){
     if(!file) return;
@@ -5121,28 +5160,26 @@ var GENERIC_BLESSINGS = [
       save(); applyTheme();
     });
   });
-  // v1.3.0：侧边导航栏统一入口（替代原顶部杂牌按钮）
-  [].forEach.call(document.querySelectorAll('#sideNav .side-item[data-view]'), function(b){
-    b.addEventListener('click', function(){ switchView(this.getAttribute('data-view')); });
-  });
-  [].forEach.call(document.querySelectorAll('#sideNav .side-item[data-act]'), function(b){
-    b.addEventListener('click', function(){
-      var act = this.getAttribute('data-act');
-      if(act==='setup') openSetup(false);
-      else if(act==='appsettings') openAppSettings();
-      else if(act==='courses') openCourseManage();
-      else if(act==='grades') openGradeManage();
-      else if(act==='classes') openClassManage();
-      else if(act==='bg') openBg();
-      else if(act==='memo'){ document.getElementById('inpMemo').value = state.memo || ''; showModal('memoBackdrop'); }
-      else if(act==='excel') exportCsv();
-      else if(act==='export') exportBackup();
-      else if(act==='import') document.getElementById('importFile').click();
-      else if(act==='print') window.print();
-      else if(act==='help') openHelp();
-      else if(act==='bless') showBlessCard();
-      else if(act==='mode') toggleMode();
-    });
+  // v1.3.1：侧边栏 + 课表页工具栏统一动作入口（工具类功能集成到工具栏，侧边栏不再展开）
+  function handleAct(act){
+    if(act==='gotoSwap') showSwap();
+    else if(act==='setup') openSetup(false);
+    else if(act==='appsettings') openAppSettings();
+    else if(act==='courses') openCourseManage();
+    else if(act==='grades') openGradeManage();
+    else if(act==='classes') openClassManage();
+    else if(act==='bg') openBg();
+    else if(act==='memo'){ document.getElementById('inpMemo').value = state.memo || ''; showModal('memoBackdrop'); }
+    else if(act==='excel') exportCsv();
+    else if(act==='export') exportBackup();
+    else if(act==='import') document.getElementById('importFile').click();
+    else if(act==='print') window.print();
+    else if(act==='help') openHelp();
+    else if(act==='bless') showBlessCard();
+    else if(act==='mode') toggleMode();
+  }
+  [].forEach.call(document.querySelectorAll('#sideNav .side-item[data-act], #gridToolbar .tbtn[data-act]'), function(b){
+    b.addEventListener('click', function(){ handleAct(this.getAttribute('data-act')); });
   });
   document.getElementById('btnSaveAppSettings').addEventListener('click', saveAppSettings);
   // 首页快捷入口
